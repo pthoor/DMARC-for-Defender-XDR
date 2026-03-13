@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  pester-tests:
+    name: Pester Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+
+      - name: Run Pester Tests
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = './tests'
+          $config.Output.Verbosity = 'Detailed'
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+
+  psscriptanalyzer:
+    name: PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module -Name PSScriptAnalyzer -Force -ErrorAction Stop
+          $results = @()
+          $results += Invoke-ScriptAnalyzer -Path ./src -Recurse -Severity Warning,Error
+          $results += Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Severity Warning,Error
+          if ($results.Count -gt 0) {
+            $results | Format-Table -AutoSize
+            throw "PSScriptAnalyzer found $($results.Count) issue(s)."
+          }
+
+  bicep-validate:
+    name: Bicep Validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+
+      - name: Bicep syntax check
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+      - name: Bicep lint
+        run: az bicep lint --file infra/main.bicep
+
+  credential-scan:
+    name: Credential Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+        with:
+          fetch-depth: 0
+
+      - name: Scan for credentials
+        shell: pwsh
+        run: |
+          $patterns = @(
+            'password\s*=',
+            'secret\s*=',
+            'api_key\s*=',
+            'connectionstring\s*=',
+            'AKIA[0-9A-Z]{16}',
+            'ghp_[a-zA-Z0-9]{36}',
+            'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'
+          )
+          $excludeArgs = @(
+            '--',
+            ':(exclude)*.md',
+            ':(exclude)LICENSE',
+            ':(exclude)*.Tests.ps1',
+            ':(exclude)TEST_SUMMARY.md'
+          )
+          $findings = @()
+          foreach ($pattern in $patterns) {
+            $result = git grep -n -E $pattern @excludeArgs 2>&1
+            if ($result) {
+              $findings += $result
+            }
+          }
+          if ($findings.Count -gt 0) {
+            $findings | ForEach-Object { Write-Host $_ }
+            throw "Credential scan found $($findings.Count) potential secret(s)."
+          }
