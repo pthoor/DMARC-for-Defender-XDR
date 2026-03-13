@@ -19,7 +19,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run Pester Tests
         shell: pwsh
@@ -37,7 +37,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -59,7 +59,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Bicep syntax check
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
@@ -74,7 +74,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
