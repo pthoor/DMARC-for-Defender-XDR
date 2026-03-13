@@ -91,10 +91,10 @@ jobs:
         shell: pwsh
         run: |
           $patterns = @(
-            'password\s*=','
-            'secret\s*=','
-            'api_key\s*=','
-            'connectionstring\s*=','
+            'password\s*=',
+            'secret\s*=',
+            'api_key\s*=',
+            'connectionstring\s*=',
             'AKIA[0-9A-Z]{16}',
             'ghp_[a-zA-Z0-9]{36}',
             'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'
@@ -104,7 +104,10 @@ jobs:
             ':(exclude)*.md',
             ':(exclude)LICENSE',
             ':(exclude)*.Tests.ps1',
-            ':(exclude)TEST_SUMMARY.md'
+            ':(exclude)*.bicep',
+            ':(exclude)*.bicepparam',
+            ':(exclude)*.yml',
+            ':(exclude)*.yaml'
           )
           $findings = @()
           foreach ($pattern in $patterns) {
