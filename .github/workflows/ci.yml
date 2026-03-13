@@ -121,3 +121,4 @@ jobs:
             throw "Credential scan found $($findings.Count) potential secret(s)."
           }
           Write-Host "No credentials detected."
+          exit 0
