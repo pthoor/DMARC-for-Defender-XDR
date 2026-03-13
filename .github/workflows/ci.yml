@@ -19,7 +19,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
 
       - name: Run Pester Tests
         shell: pwsh
@@ -37,7 +37,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
 
       - name: Run PSScriptAnalyzer
         shell: pwsh
@@ -59,7 +59,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
 
       - name: Bicep syntax check
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
@@ -74,7 +74,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@de0fac238fd1cfb3899bca4c49a6def4be7e0049
+        uses: actions/checkout@e7b2cedc3a86fc6e7e0b69b7ab71e6a52bc43655 # v4.2.2
         with:
           fetch-depth: 0
 
@@ -82,10 +82,10 @@ jobs:
         shell: pwsh
         run: |
           $patterns = @(
-            'password\s*=',
-            'secret\s*=',
-            'api_key\s*=',
-            'connectionstring\s*=',
+            'password\s*=','
+            'secret\s*=','
+            'api_key\s*=','
+            'connectionstring\s*=','
             'AKIA[0-9A-Z]{16}',
             'ghp_[a-zA-Z0-9]{36}',
             'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'
