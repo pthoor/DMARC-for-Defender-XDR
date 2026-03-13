@@ -45,11 +45,14 @@ RUF reports provide per-message failure details:
 - **Real-time Processing**: Automatic ingestion via Microsoft Graph change notifications and Event Grid
 - **Rich Analytics**: Azure Monitor Workbook with comprehensive visualizations
 - **GeoIP Mapping**: Geographic distribution of email sources with pass/fail rates
-- **ASN Enrichment**: Identify mail providers by Autonomous System Number
-- **Subdomain Discovery**: Track email from all subdomains to prevent shadow IT
-- **Threat Detection**: Identify spoofing attempts and suspicious source IPs
-- **Compliance Tracking**: Monitor SPF, DKIM, and DMARC pass rates per domain
-- **Policy Guidance**: Built-in recommendations for DMARC policy progression
+- **Sender Identification**: Automatic service recognition via SPF domain matching (Microsoft 365, Google Workspace, SendGrid, Mailchimp, Salesforce, and 16 more)
+- **Alignment Analysis**: Detect SPF/DKIM alignment failures with actionable fix guidance
+- **Subdomain Discovery**: Track email from all subdomains, detect new subdomains, and flag policy gaps
+- **Threat Detection**: Identify spoofing attempts, suspicious source IPs, and volume anomalies
+- **Compliance Tracking**: Monitor SPF, DKIM, and DMARC pass rates per domain with policy health checks
+- **Policy Guidance**: Built-in recommendations for DMARC policy progression with service-specific fix instructions
+- **Proactive Alerting**: Optional Azure Monitor alert rules for pass rate drops, missing reports, new threats, and volume spikes
+- **Detection Rules**: Sentinel-compatible YAML detection rules for Defender XDR (importable via pipelines or XDRConverter)
 - **Zero Secrets**: Uses Azure Managed Identity for authentication (no client secrets)
 - **Scalable & Cost-Effective**: Serverless architecture, typically under $1/month
 
@@ -76,16 +79,22 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture, data
 
 ### 1. Deploy Azure Resources
 
-First, generate the Graph client state secret and set it as an environment variable. This secret validates Graph change notifications. Using `readEnvironmentVariable()` in the `.bicepparam` file ensures the secret is never stored in source control.
+First, set the required environment variables. The `.bicepparam` file uses `readEnvironmentVariable()` to keep secrets and tenant-specific values out of source control.
 
 **PowerShell:**
 ```powershell
+# Shared mailbox Object ID from Entra ID
+$env:MAILBOX_USER_ID = '<your-mailbox-object-id>'
+
 # Generates a random GUID in-memory — safe even with PowerShell Script Block Logging enabled
 $env:GRAPH_CLIENT_STATE = [guid]::NewGuid().ToString()
 ```
 
 **Bash:**
 ```bash
+# Shared mailbox Object ID from Entra ID
+export MAILBOX_USER_ID='<your-mailbox-object-id>'
+
 export GRAPH_CLIENT_STATE=$(cat /proc/sys/kernel/random/uuid)
 ```
 
@@ -124,9 +133,11 @@ Or use the Azure Portal to deploy `infra/main.bicep` with custom parameters.
 **Key Parameters:**
 - `baseName`: Base name for all resources (e.g., "dmarc")
 - `location`: Azure region
-- `mailboxUserId`: Object ID of the shared mailbox user (required)
+- `mailboxUserId`: Object ID of the shared mailbox user (set via `MAILBOX_USER_ID` env var)
 - `existingWorkspaceId`: (Optional) Use an existing Log Analytics Workspace
 - `deployPartnerConfig`: (Optional, default `true`) Deploy Event Grid partner configuration for Microsoft Graph API. Set to `false` if you already have a partner configuration in the resource group.
+- `deployAlerts`: (Optional, default `false`) Deploy Azure Monitor scheduled query alert rules for DMARC anomaly detection
+- `alertActionGroupId`: (Optional) Resource ID of an Action Group to receive alert notifications
 
 The Bicep deployment automatically authorizes Microsoft Graph API as an Event Grid partner — no manual Portal steps required.
 
@@ -300,73 +311,30 @@ _dmarc.example.com. IN TXT "v=DMARC1; p=reject; rua=mailto:dmarc@example.com; ad
 
 ## Alerting & Notifications
 
-Azure Monitor Alert Rules provide automated notifications for critical DMARC events — the Azure-native equivalent of email alerts from commercial DMARC tools.
+### Option 1: Deploy Alert Rules via Bicep (Recommended)
 
-### Setting Up Alert Rules
+The infrastructure includes optional Azure Monitor scheduled query alert rules. Enable them during deployment:
 
-1. **Navigate to your Log Analytics Workspace** → **Alerts** → **Create alert rule**
-2. **Select a signal type**: "Custom log search"
-3. **Enter a KQL query** (see examples below)
-4. **Configure alert logic**: Threshold, frequency, evaluation period
-5. **Add action groups**: Email, SMS, webhook, etc.
+```powershell
+$env:MAILBOX_USER_ID = '<your-mailbox-object-id>'
+$env:GRAPH_CLIENT_STATE = [guid]::NewGuid().ToString()
 
-### Example Alert Queries
-
-#### Alert on New Source IPs
-
-Detect when a new source IP is seen for the first time in the last 24 hours:
-
-```kql
-let known = DMARCReports_CL
-| where TimeGenerated between (ago(30d) .. ago(1d))
-| distinct SourceIP;
-DMARCReports_CL
-| where TimeGenerated > ago(1d)
-| where SourceIP !in (known)
-| summarize
-    Messages = sum(MessageCount),
-    Domains = make_set(Domain, 10),
-    FirstSeen = min(TimeGenerated)
-    by SourceIP
-| where Messages > 10  // Threshold: only alert if > 10 messages
-| project SourceIP, Messages, Domains, FirstSeen
+az deployment group create `
+  --resource-group "rg-dmarc-prod" `
+  --template-file infra/main.bicep `
+  --parameters infra/main.bicepparam `
+  --parameters deployAlerts=true alertActionGroupId='/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Insights/actionGroups/<name>'
 ```
 
-**Recommendation**: Run every 1 hour, alert when result count > 0
+This deploys 4 alert rules:
+- **DMARC Pass Rate Drop** — fires when pass rate drops below threshold (default 90%), runs every 1 hour
+- **No Reports Received** — fires when no reports ingested in 48+ hours, runs every 24 hours
+- **New Suspicious Source IP** — fires when a new IP appears with both SPF and DKIM failing, runs every 6 hours
+- **Volume Spike** — fires when daily volume exceeds 3x the 30-day baseline, runs every 1 hour
 
-#### Alert on Authentication Failure Spike
+### Option 2: Manual Alert Rules
 
-Detect when the failure rate exceeds 10%:
-
-```kql
-DMARCReports_CL
-| where TimeGenerated > ago(1h)
-| summarize
-    Total = sum(MessageCount),
-    Failed = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail')
-| extend FailRate = 100.0 * Failed / Total
-| where FailRate > 10.0  // Alert if failure rate > 10%
-| project Total, Failed, FailRate
-```
-
-**Recommendation**: Run every 1 hour, alert when result count > 0
-
-#### Alert on DMARC Pass Rate Drop
-
-Detect when overall pass rate drops below 95%:
-
-```kql
-DMARCReports_CL
-| where TimeGenerated > ago(6h)
-| summarize
-    Total = sum(MessageCount),
-    Passed = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass')
-| extend PassRate = 100.0 * Passed / Total
-| where PassRate < 95.0  // Alert if pass rate drops below 95%
-| project Total, Passed, PassRate
-```
-
-**Recommendation**: Run every 6 hours, alert when result count > 0
+You can also create alert rules manually via the Azure Portal. The workbook's **Reporting & Ops** tab includes ready-to-use KQL queries for Azure Monitor alerts.
 
 ### Action Groups
 
@@ -376,6 +344,25 @@ Configure **Action Groups** to define how you're notified:
 - **Azure Function/Logic App**: Custom remediation workflows
 
 For more on Azure Monitor Alerts, see: [Microsoft Docs - Create log alert rules](https://learn.microsoft.com/en-us/azure/azure-monitor/alerts/alerts-create-log-alert-rule)
+
+## Detection Rules for Defender XDR
+
+The `detections/` directory contains Sentinel-compatible YAML detection rules for DMARC threat scenarios:
+
+| Detection | Description | Frequency |
+|-----------|-------------|-----------|
+| `spoofing-detection.yaml` | High-volume DMARC failures from a single IP | 1 hour |
+| `new-unauthorized-sender.yaml` | New source IPs failing authentication | 6 hours |
+| `passrate-anomaly.yaml` | Per-domain pass rate drops below baseline | 1 hour |
+| `policy-override-abuse.yaml` | Unusual DMARC policy override reasons | 6 hours |
+
+### Deployment Options
+
+- **Sentinel Repositories**: Connect your GitHub repo via **Settings > Repositories** and point to `detections/` for automatic deployment
+- **[XDRConverter](https://github.com/f-bader/XDRConverter)**: Convert to Defender XDR Custom Detection Rules
+- **Manual**: Paste the KQL from the `query:` field when creating rules in the Defender portal
+
+See [`detections/README.md`](detections/README.md) for full instructions.
 
 ## Workbook Capabilities
 
@@ -390,27 +377,30 @@ The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 
 
 ### Authentication
 - Combined SPF/DKIM/DMARC authentication matrix
-- SPF and DKIM pass rate trends over time
+- SPF and DKIM pass rate trends over time (using report date range, not ingestion time)
 - Failure reason analysis (forwarding, mailing lists, local policy overrides)
 - Policy override reasons and forwarding detection
 - Envelope vs header from mismatch analysis
 - DKIM selector-level detail and alignment mode breakdown
+- **Alignment failures**: Messages where raw SPF/DKIM passed but DMARC alignment failed, with fix guidance
+- **Service-specific fix recommendations**: Per-sender SPF include and DKIM setup instructions for 14+ known services
 
 ### Sources & Senders
-- **Top 50 Source IPs** with pass rates, ASN/organization info, and IP reputation links
-- Authorized vs unknown sender classification
+- **Top 50 Source IPs** with pass rates, service identification, and IP reputation links
+- Authorized vs unknown sender classification (via SPF domain matching, not ASN)
+- Source IP classification by provider category (Email Platform, ESP, CRM, SaaS, Security)
 - Volume anomaly detection (Z-score based)
 - **GeoIP Map** showing geographic distribution of email sources
 - **Suspicious IPs** (both SPF and DKIM failing)
-- Top failing senders with remediation hints
 - Volume by sending identity (HeaderFrom)
 
 ### Domain Compliance
 - Per-domain compliance scoring and pass rates
 - Domain readiness for policy enforcement progression
 - Published DMARC policies
+- **DMARC Policy Health Check**: Flags p=none, missing subdomain policy, low pct, and other gaps
 - Disposition over time (none/quarantine/reject)
-- **Subdomain discovery** (identify shadow IT or unauthorized subdomains)
+- **Subdomain discovery**: Identify shadow IT, detect new subdomains, and flag subdomain policy gaps
 - DKIM selector rotation tracking
 - BIMI readiness assessment
 

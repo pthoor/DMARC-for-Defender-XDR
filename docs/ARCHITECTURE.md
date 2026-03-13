@@ -22,8 +22,9 @@ Azure Function: DmarcReportProcessor (Event Grid trigger)
   ▼
 Log Analytics Workspace (DMARCReports_CL custom table)
   │
-  ▼
-Azure Monitor Workbook / Microsoft Sentinel Workbook
+  ├──▶ Azure Monitor Workbook (5 tabs, 45+ visualizations)
+  ├──▶ Azure Monitor Alert Rules (optional, deployed via alerts.bicep)
+  └──▶ Defender XDR Custom Detection Rules (YAML in detections/)
 ```
 
 ## Functions

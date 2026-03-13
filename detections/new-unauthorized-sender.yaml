@@ -1,0 +1,41 @@
+id: b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e
+name: DMARC - New Unauthorized Sender
+description: |
+  Detects new source IPs (not seen in previous 14 days) that are failing both SPF and DKIM authentication.
+  These may represent new spoofing attempts or misconfigured legitimate senders that need to be investigated.
+severity: Medium
+requiredDataConnectors:
+  - connectorId: CustomLogsAma
+    dataTypes:
+      - DMARCReports_CL
+queryFrequency: PT6H
+queryPeriod: P14D
+triggerOperator: gt
+triggerThreshold: 0
+status: Available
+tactics:
+  - InitialAccess
+relevantTechniques:
+  - T1566
+query: |
+  let known = DMARCReports_CL
+  | where TimeGenerated between (ago(14d) .. ago(6h))
+  | distinct SourceIP;
+  DMARCReports_CL
+  | where TimeGenerated > ago(6h)
+  | where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'
+  | where SourceIP !in (known)
+  | summarize
+      FailedMessages = sum(MessageCount),
+      Domains = make_set(Domain, 10),
+      HeaderFroms = make_set(HeaderFrom, 10),
+      SpfDomains = make_set(SpfDomain, 5)
+      by SourceIP
+  | where FailedMessages >= 10
+entityMappings:
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: SourceIP
+version: 1.0.0
+kind: Scheduled

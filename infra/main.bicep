@@ -38,6 +38,12 @@ param existingAppInsightsId string = ''
 @description('Deploy Event Grid partner configuration to authorize Microsoft Graph API. Disable if you already have a partner configuration in this resource group with Graph API authorized.')
 param deployPartnerConfig bool = true
 
+@description('Deploy Azure Monitor scheduled query alert rules for DMARC anomaly detection.')
+param deployAlerts bool = false
+
+@description('Resource ID of an Action Group to receive alert notifications. Leave empty to create alerts without notifications.')
+param alertActionGroupId string = ''
+
 @description('Deployment timestamp for partner authorization expiration. Do not set manually.')
 param deploymentTime string = utcNow()
 
@@ -448,6 +454,17 @@ resource partnerConfiguration 'Microsoft.EventGrid/partnerConfigurations@2022-06
         }
       ]
     }
+  }
+}
+
+// ── Alert Rules (optional) ──
+
+module alerts 'alerts.bicep' = if (deployAlerts) {
+  name: 'dmarc-alerts'
+  params: {
+    location: location
+    workspaceId: workspaceId
+    actionGroupId: alertActionGroupId
   }
 }
 

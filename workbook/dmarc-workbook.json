@@ -310,10 +310,17 @@
             "name": "wow-comparison"
           },
           {
+            "type": 1,
+            "content": {
+              "json": "### Understanding Pass Rates\n**DMARC Pass Rate** = percentage of messages where **either SPF or DKIM passes** (logical OR). This is the metric that determines whether a message is compliant with your DMARC policy.\n\n**SPF Pass Rate** and **DKIM Pass Rate** are measured independently. It is normal for SPF to be lower than DMARC — forwarded emails and third-party senders often break SPF alignment while DKIM signatures remain valid. A high DMARC pass rate with a lower SPF rate simply means DKIM is doing the heavy lifting."
+            },
+            "name": "compliance-trend-explanation"
+          },
+          {
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet data = DMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n;\ndata\n| summarize\n    DmarcPass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    SpfPass = sumif(MessageCount, PolicyEvaluated_spf == 'pass'),\n    DkimPass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass'),\n    Total = sum(MessageCount)\n    by bin(TimeGenerated, 1d)\n| extend\n    DmarcPassRate = round(100.0 * DmarcPass / Total, 1),\n    SpfPassRate = round(100.0 * SpfPass / Total, 1),\n    DkimPassRate = round(100.0 * DkimPass / Total, 1)\n| project TimeGenerated, DmarcPassRate, SpfPassRate, DkimPassRate\n| sort by TimeGenerated asc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet data = DMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n;\ndata\n| summarize\n    DmarcPass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    SpfPass = sumif(MessageCount, PolicyEvaluated_spf == 'pass'),\n    DkimPass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass'),\n    Total = sum(MessageCount)\n    by bin(ReportDateRangeBegin, 1d)\n| extend\n    DmarcPassRate = round(100.0 * DmarcPass / Total, 1),\n    SpfPassRate = round(100.0 * SpfPass / Total, 1),\n    DkimPassRate = round(100.0 * DkimPass / Total, 1)\n| project TimeGenerated = ReportDateRangeBegin, DmarcPassRate, SpfPassRate, DkimPassRate\n| sort by TimeGenerated asc",
               "size": 3,
               "title": "Compliance Rate Trend (Daily)",
               "queryType": 0,
@@ -329,7 +336,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail')\n    by bin(TimeGenerated, 1d)\n| sort by TimeGenerated asc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail')\n    by bin(ReportDateRangeBegin, 1d)\n| project TimeGenerated = ReportDateRangeBegin, Pass, Fail\n| sort by TimeGenerated asc",
               "size": 3,
               "title": "Pass/Fail Volume (Daily)",
               "queryType": 0,
@@ -352,6 +359,13 @@
               }
             },
             "name": "pass-fail-trend"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "### Compliance Score & Risk Level\nThe **Compliance Score** (0–100) reflects overall DMARC deployment maturity per domain, not just the pass rate. It is a weighted composite:\n\n| Component | Weight | Description |\n|---|---|---|\n| DMARC Pass Rate | 40% | Messages passing DMARC (SPF or DKIM) |\n| SPF Pass Rate | 25% | Messages with aligned SPF |\n| DKIM Pass Rate | 25% | Messages with aligned DKIM |\n| Policy Enforcement | 10% | `p=reject` = 100, `p=quarantine` = 60, `p=none` = 20 |\n\n**Why can the score be lower than the pass rate?** A domain with 99% DMARC pass rate but low SPF alignment and `p=none` policy will score lower because it lacks defense-in-depth (both SPF and DKIM) and is not yet enforcing its policy.\n\n**Risk Levels:** Low (90+) · Moderate (70–89) · High (50–69) · Critical (<50)"
+            },
+            "name": "risk-level-explanation"
           },
           {
             "type": 3,
@@ -431,7 +445,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet data = DMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n;\nlet domainIssues = data\n| summarize\n    Messages = sum(MessageCount),\n    FailedMessages = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    arg_max(TimeGenerated, PolicyPublished_p)\n    by Domain\n| extend PassRate = round(100.0 * (Messages - FailedMessages) / Messages, 1)\n| extend Issue = case(\n    PolicyPublished_p == 'none' and PassRate >= 97, strcat('Domain \"', Domain, '\" is ready for p=quarantine (', PassRate, '% pass rate) - move from monitor mode'),\n    PolicyPublished_p == 'quarantine' and PassRate >= 99, strcat('Domain \"', Domain, '\" is ready for p=reject (', PassRate, '% pass rate) - strengthen enforcement'),\n    PassRate < 80, strcat('Domain \"', Domain, '\" has critical auth failures (', PassRate, '% pass rate, ', FailedMessages, ' failures) - investigate sources'),\n    PassRate < 95, strcat('Domain \"', Domain, '\" has auth issues (', PassRate, '% pass rate) - review failing senders'),\n    ''\n)\n| where isnotempty(Issue);\nlet ipIssues = data\n| where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'\n| summarize FailedMessages = sum(MessageCount), Domains = make_set(Domain, 3) by SourceIP\n| where FailedMessages >= 10\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend ASN_Org = tostring(GeoInfo.asn_org)\n| extend Issue = strcat('Suspicious IP ', SourceIP, ' (', ASN_Org, ') sent ', FailedMessages, ' failed messages for ', strcat_array(Domains, ', '))\n| top 5 by FailedMessages desc;\nlet policyIssues = data\n| summarize arg_max(TimeGenerated, PolicyPublished_p) by Domain\n| where PolicyPublished_p == 'none'\n| summarize Domains = make_list(Domain)\n| where array_length(Domains) > 0\n| extend Issue = strcat(array_length(Domains), ' domain(s) still in monitor mode (p=none): ', strcat_array(Domains, ', '));\nunion\n    (domainIssues | project Priority = case(Issue has 'critical', 1, Issue has 'ready for p=reject', 2, Issue has 'ready for p=quarantine', 3, 4), Category = 'Domain Health', Issue),\n    (ipIssues | project Priority = 1, Category = 'Suspicious Activity', Issue),\n    (policyIssues | project Priority = 3, Category = 'Policy Progression', Issue)\n| sort by Priority asc\n| take 15\n| project Priority = case(Priority == 1, 'Critical', Priority == 2, 'High', Priority == 3, 'Medium', 'Low'), Category, ActionItem = Issue",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet data = DMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n;\nlet domainIssues = data\n| summarize\n    Messages = sum(MessageCount),\n    FailedMessages = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    arg_max(TimeGenerated, PolicyPublished_p)\n    by Domain\n| extend PassRate = round(100.0 * (Messages - FailedMessages) / Messages, 1)\n| extend Issue = case(\n    PolicyPublished_p == 'none' and PassRate >= 97, strcat('Domain \"', Domain, '\" is ready for p=quarantine (', PassRate, '% pass rate) - move from monitor mode'),\n    PolicyPublished_p == 'quarantine' and PassRate >= 99, strcat('Domain \"', Domain, '\" is ready for p=reject (', PassRate, '% pass rate) - strengthen enforcement'),\n    PassRate < 80, strcat('Domain \"', Domain, '\" has critical auth failures (', PassRate, '% pass rate, ', FailedMessages, ' failures) - investigate sources'),\n    PassRate < 95, strcat('Domain \"', Domain, '\" has auth issues (', PassRate, '% pass rate) - review failing senders'),\n    ''\n)\n| where isnotempty(Issue);\nlet ipIssues = data\n| where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'\n| summarize FailedMessages = sum(MessageCount), Domains = make_set(Domain, 3), SpfDomains = make_set(SpfDomain, 1) by SourceIP\n| where FailedMessages >= 10\n| extend SpfDomain = tostring(SpfDomains[0])\n| extend ServiceName = case(\n    SpfDomain has 'spf.protection.outlook.com', 'Microsoft 365',\n    SpfDomain has '_spf.google.com', 'Google Workspace',\n    SpfDomain has 'amazonses.com', 'Amazon SES',\n    SpfDomain has 'sendgrid.net', 'SendGrid',\n    SpfDomain has 'servers.mcsv.net', 'Mailchimp',\n    SpfDomain has 'mailgun.org', 'Mailgun',\n    SpfDomain has 'pphosted.com', 'Proofpoint',\n    SpfDomain has '_netblocks.mimecast.com', 'Mimecast',\n    isnotempty(SpfDomain), SpfDomain,\n    'Unknown'\n)\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend Country = tostring(GeoInfo.country)\n| extend Issue = strcat('Suspicious IP ', SourceIP, ' (', ServiceName, ', ', Country, ') sent ', FailedMessages, ' failed messages for ', strcat_array(Domains, ', '))\n| top 5 by FailedMessages desc;\nlet policyIssues = data\n| summarize arg_max(TimeGenerated, PolicyPublished_p) by Domain\n| where PolicyPublished_p == 'none'\n| summarize Domains = make_list(Domain)\n| where array_length(Domains) > 0\n| extend Issue = strcat(array_length(Domains), ' domain(s) still in monitor mode (p=none): ', strcat_array(Domains, ', '));\nunion\n    (domainIssues | project Priority = case(Issue has 'critical', 1, Issue has 'ready for p=reject', 2, Issue has 'ready for p=quarantine', 3, 4), Category = 'Domain Health', Issue),\n    (ipIssues | project Priority = 1, Category = 'Suspicious Activity', Issue),\n    (policyIssues | project Priority = 3, Category = 'Policy Progression', Issue)\n| sort by Priority asc\n| take 15\n| project Priority = case(Priority == 1, 'Critical', Priority == 2, 'High', Priority == 3, 'Medium', 'Low'), Category, ActionItem = Issue",
               "size": 3,
               "title": "What to Fix Next",
               "queryType": 0,
@@ -485,6 +499,45 @@
               }
             },
             "name": "action-items"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "### Failed Messages\nMessages where **both SPF and DKIM failed**, meaning DMARC did not pass. Use the search box to filter by IP, domain, or any column value."
+            },
+            "name": "failed-messages-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend Country = tostring(GeoInfo.country)\n| extend ServiceName = case(\n    SpfDomain has 'spf.protection.outlook.com', 'Microsoft 365',\n    SpfDomain has '_spf.google.com', 'Google Workspace',\n    SpfDomain has 'amazonses.com', 'Amazon SES',\n    SpfDomain has 'sendgrid.net', 'SendGrid',\n    SpfDomain has 'servers.mcsv.net', 'Mailchimp',\n    SpfDomain has 'mandrillapp.com', 'Mandrill',\n    SpfDomain has 'mailgun.org', 'Mailgun',\n    SpfDomain has 'spf.mtasv.net', 'Postmark',\n    SpfDomain has '_spf.sparkpostmail.com', 'SparkPost',\n    SpfDomain has '_spf.salesforce.com', 'Salesforce',\n    SpfDomain has 'pphosted.com', 'Proofpoint',\n    SpfDomain has '_netblocks.mimecast.com', 'Mimecast',\n    SpfDomain has 'hubspotemail.net', 'HubSpot',\n    isnotempty(SpfDomain), SpfDomain,\n    'Unknown'\n)\n| project\n    TimeGenerated,\n    Domain,\n    SourceIP,\n    Country,\n    ServiceName,\n    HeaderFrom,\n    EnvelopeFrom,\n    MessageCount,\n    SpfResult,\n    SpfDomain,\n    DkimResult,\n    DkimDomain,\n    Disposition = PolicyEvaluated_disposition,\n    OverrideReason = PolicyEvaluated_reason_type,\n    OverrideComment = PolicyEvaluated_reason_comment,\n    Reporter = ReportOrgName\n| sort by TimeGenerated desc",
+              "size": 3,
+              "title": "Failed Messages Detail",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "{Workspace}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "rowLimit": 500,
+                "filter": true,
+                "sortBy": [
+                  {
+                    "itemKey": "MessageCount",
+                    "sortOrder": 2
+                  }
+                ]
+              },
+              "sortBy": [
+                {
+                  "itemKey": "MessageCount",
+                  "sortOrder": 2
+                }
+              ]
+            },
+            "name": "failed-messages-grid"
           }
         ]
       },
@@ -569,7 +622,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    SpfPassRate = round(100.0 * sumif(MessageCount, PolicyEvaluated_spf == 'pass') / sum(MessageCount), 1),\n    DkimPassRate = round(100.0 * sumif(MessageCount, PolicyEvaluated_dkim == 'pass') / sum(MessageCount), 1)\n    by bin(TimeGenerated, 1d)\n| sort by TimeGenerated asc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    SpfPassRate = round(100.0 * sumif(MessageCount, PolicyEvaluated_spf == 'pass') / sum(MessageCount), 1),\n    DkimPassRate = round(100.0 * sumif(MessageCount, PolicyEvaluated_dkim == 'pass') / sum(MessageCount), 1)\n    by bin(ReportDateRangeBegin, 1d)\n| project TimeGenerated = ReportDateRangeBegin, SpfPassRate, DkimPassRate\n| sort by TimeGenerated asc",
               "size": 3,
               "title": "SPF & DKIM Pass Rate Trend",
               "queryType": 0,
@@ -647,7 +700,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where PolicyEvaluated_dkim == 'fail' or PolicyEvaluated_spf == 'fail'\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend ASN_Org = tostring(GeoInfo.asn_org)\n| summarize\n    FailedMessages = sum(MessageCount),\n    SpfFails = sumif(MessageCount, PolicyEvaluated_spf == 'fail'),\n    DkimFails = sumif(MessageCount, PolicyEvaluated_dkim == 'fail'),\n    SpfDomains = make_set(SpfDomain, 3),\n    DkimDomains = make_set(DkimDomain, 3),\n    DkimSelectors = make_set(DkimSelector, 3),\n    HeaderFroms = make_set(HeaderFrom, 3),\n    ReasonTypes = make_set(PolicyEvaluated_reason_type, 3)\n    by SourceIP, ASN_Org\n| extend\n    Remediation = case(\n        SpfFails > 0 and DkimFails == 0, strcat('Add ', SourceIP, ' to SPF record for ', strcat_array(SpfDomains, '/')),\n        DkimFails > 0 and SpfFails == 0, strcat('Check DKIM signing config for selector(s): ', strcat_array(DkimSelectors, ', ')),\n        SpfFails > 0 and DkimFails > 0 and tostring(ReasonTypes) has 'forwarded', 'Forwarded mail - consider ARC or trusted forwarder list',\n        SpfFails > 0 and DkimFails > 0, strcat('Fix both SPF (add IP) and DKIM (configure signing) for ', strcat_array(HeaderFroms, '/')),\n        'Investigate sender configuration'\n    )\n| top 25 by FailedMessages desc\n| project SourceIP, ASN_Org, FailedMessages, SpfFails, DkimFails, Remediation, HeaderFroms",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where PolicyEvaluated_dkim == 'fail' or PolicyEvaluated_spf == 'fail'\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| summarize\n    FailedMessages = sum(MessageCount),\n    SpfFails = sumif(MessageCount, PolicyEvaluated_spf == 'fail'),\n    DkimFails = sumif(MessageCount, PolicyEvaluated_dkim == 'fail'),\n    SpfDomains = make_set(SpfDomain, 3),\n    DkimDomains = make_set(DkimDomain, 3),\n    DkimSelectors = make_set(DkimSelector, 3),\n    HeaderFroms = make_set(HeaderFrom, 3),\n    ReasonTypes = make_set(PolicyEvaluated_reason_type, 3)\n    by SourceIP, ServiceName\n| extend Recommendation = case(\n    ServiceName == \"SendGrid\", \"Add 'include:sendgrid.net' to SPF. Configure custom DKIM in SendGrid > Settings > Sender Authentication.\",\n    ServiceName == \"Mailchimp\", \"Add 'include:servers.mcsv.net' to SPF. Enable custom DKIM in Mailchimp > Settings > Verified Domains.\",\n    ServiceName == \"Salesforce\", \"Add 'include:_spf.salesforce.com' to SPF. Configure DKIM in Salesforce > Setup > DKIM Keys.\",\n    ServiceName == \"Google Workspace\", \"Add 'include:_spf.google.com' to SPF. Enable DKIM in Google Admin > Apps > Gmail > Authenticate Email.\",\n    ServiceName == \"Microsoft 365\", \"Verify 'include:spf.protection.outlook.com' in SPF. Enable DKIM in Defender portal > Email Authentication > DKIM.\",\n    ServiceName == \"Amazon SES\", \"Add 'include:amazonses.com' to SPF. Configure DKIM via SES console > Verified Identities > DKIM.\",\n    ServiceName == \"Mandrill\", \"Add 'include:mandrillapp.com' to SPF. Set up DKIM in Mandrill > Settings > Domains > DKIM.\",\n    ServiceName == \"Mailgun\", \"Add 'include:mailgun.org' to SPF. Configure DKIM in Mailgun > Domains > DNS Records.\",\n    ServiceName == \"Postmark\", \"Add 'include:spf.mtasv.net' to SPF. DKIM is auto-configured when verifying domain in Postmark.\",\n    ServiceName == \"SparkPost\", \"Add 'include:_spf.sparkpostmail.com' to SPF. Set up DKIM in SparkPost > Configuration > Sending Domains.\",\n    ServiceName == \"HubSpot\", \"Add HubSpot SPF include (check your portal for exact value). Configure DKIM in Settings > Domain Connect.\",\n    ServiceName == \"Proofpoint\", \"Add 'include:pphosted.com' to SPF. Configure DKIM signing in Proofpoint admin console.\",\n    ServiceName == \"Mimecast\", \"Add Mimecast SPF include. Configure DKIM in Mimecast Administration > Gateway > Policies.\",\n    ServiceName == \"Dynamics 365 Marketing\", \"Add 'include:marketing.dynamics.com' to SPF. Authenticate domain in Dynamics 365 Marketing > Settings.\",\n    SpfFails > 0 and DkimFails == 0, strcat(\"Add appropriate SPF include for \", ServiceName, \".\"),\n    DkimFails > 0 and SpfFails == 0, strcat(\"Configure DKIM signing for \", ServiceName, \".\"),\n    SpfFails > 0 and DkimFails > 0 and tostring(ReasonTypes) has \"forwarded\", \"Forwarded mail - consider adding sender to ARC trusted sealers in Exchange Online.\",\n    \"Review sender and add appropriate SPF include. Configure DKIM signing with your domain.\"\n)\n| top 25 by FailedMessages desc\n| project SourceIP, ServiceName, FailedMessages, SpfFails, DkimFails, Recommendation, HeaderFroms",
               "size": 3,
               "title": "Top Failing Senders with Fix Recommendations",
               "queryType": 0,
@@ -670,7 +723,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where\n    (PolicyEvaluated_spf == 'fail' and PolicyEvaluated_dkim == 'pass')\n    or PolicyEvaluated_reason_type has_any ('forwarded', 'trusted_forwarder', 'mailing_list')\n    or (isnotempty(EnvelopeFrom) and HeaderFrom != EnvelopeFrom and PolicyEvaluated_dkim == 'pass')\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend ASN_Org = tostring(GeoInfo.asn_org)\n| summarize\n    ForwardedMessages = sum(MessageCount),\n    UniqueForwarderIPs = dcount(SourceIP),\n    ForwarderOrgs = make_set(ASN_Org, 10),\n    TargetDomains = make_set(Domain, 5),\n    ReasonTypes = make_set(PolicyEvaluated_reason_type, 5)\n    by HeaderFrom\n| sort by ForwardedMessages desc\n| take 50",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where\n    (PolicyEvaluated_spf == 'fail' and PolicyEvaluated_dkim == 'pass')\n    or PolicyEvaluated_reason_type has_any ('forwarded', 'trusted_forwarder', 'mailing_list')\n    or (isnotempty(EnvelopeFrom) and HeaderFrom != EnvelopeFrom and PolicyEvaluated_dkim == 'pass')\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| summarize\n    ForwardedMessages = sum(MessageCount),\n    UniqueForwarderIPs = dcount(SourceIP),\n    ForwarderServices = make_set(ServiceName, 10),\n    TargetDomains = make_set(Domain, 5),\n    ReasonTypes = make_set(PolicyEvaluated_reason_type, 5)\n    by HeaderFrom\n| sort by ForwardedMessages desc\n| take 50",
               "size": 3,
               "title": "Forwarding Detection",
               "queryType": 0,
@@ -766,6 +819,66 @@
               "visualization": "table"
             },
             "name": "alignment-mode-breakdown"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "### Alignment Failures\nMessages where raw SPF or DKIM authentication **passed** but DMARC alignment **failed**. This happens when the authenticated domain doesn't match the Header From domain — common with forwarding, third-party senders, and mailing lists.\n\n**How to fix:** Configure custom return-path (SPF alignment) or custom DKIM signing domain (DKIM alignment) with the sending service. For forwarded mail, add the forwarder as a [trusted ARC sealer](https://learn.microsoft.com/en-us/defender-office-365/email-authentication-arc-configure) in Exchange Online."
+            },
+            "name": "alignment-failures-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where (SpfResult == 'pass' and PolicyEvaluated_spf == 'fail')\n    or (DkimResult == 'pass' and PolicyEvaluated_dkim == 'fail')\n| extend\n    AlignmentIssue = case(\n        SpfResult == 'pass' and PolicyEvaluated_spf == 'fail' and DkimResult == 'pass' and PolicyEvaluated_dkim == 'fail', 'Both SPF & DKIM misaligned',\n        SpfResult == 'pass' and PolicyEvaluated_spf == 'fail', 'SPF misaligned',\n        DkimResult == 'pass' and PolicyEvaluated_dkim == 'fail', 'DKIM misaligned',\n        'Unknown'\n    )\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| project TimeGenerated, Domain, SourceIP, AlignmentIssue, ServiceName,\n    HeaderFrom, EnvelopeFrom, SpfDomain, DkimDomain,\n    AlignmentMode_DKIM = iff(isempty(PolicyPublished_adkim), 'r', PolicyPublished_adkim),\n    AlignmentMode_SPF = iff(isempty(PolicyPublished_aspf), 'r', PolicyPublished_aspf),\n    MessageCount\n| sort by MessageCount desc",
+              "size": 3,
+              "title": "Alignment Failures (Raw Auth Pass, DMARC Alignment Fail)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "{Workspace}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "AlignmentIssue",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "==",
+                          "thresholdValue": "Both SPF & DKIM misaligned",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "startsWith",
+                          "thresholdValue": "SPF",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "startsWith",
+                          "thresholdValue": "DKIM",
+                          "representation": "yellow",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "alignment-failures"
           }
         ]
       },
@@ -800,7 +913,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet knownESPs = dynamic(['google', 'microsoft', 'amazon', 'sendgrid', 'mailchimp', 'mailgun', 'postmark', 'sparkpost', 'sendinblue', 'brevo', 'constantcontact', 'salesforce', 'hubspot', 'zendesk', 'freshdesk', 'intercom', 'mandrill', 'mimecast', 'proofpoint', 'barracuda', 'cisco', 'cloudflare', 'fastmail', 'zoho', 'rackspace', 'godaddy', 'ovh', 'hetzner', 'ionos']);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Messages = sum(MessageCount),\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    Domains = make_set(Domain, 5),\n    HeaderFroms = make_set(HeaderFrom, 5)\n    by SourceIP\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend\n    ASN_Org = tostring(GeoInfo.asn_org),\n    Country = tostring(GeoInfo.country)\n| extend\n    ASN_Org_Lower = tolower(ASN_Org),\n    PassRate = round(100.0 * Pass / Messages, 1)\n| extend\n    Classification = case(\n        PassRate >= 95 and ASN_Org_Lower has_any (knownESPs), 'Authorized (Known ESP)',\n        PassRate >= 95, 'Authorized (Passing)',\n        PassRate >= 50 and ASN_Org_Lower has_any (knownESPs), 'Needs Attention (Known ESP)',\n        PassRate < 50 and ASN_Org_Lower has_any (knownESPs), 'Misconfigured (Known ESP)',\n        PassRate < 50, 'Unknown / Suspicious',\n        'Unclassified'\n    )\n| top 100 by Messages desc\n| project SourceIP, Classification, ASN_Org, Country, Messages, PassRate, Domains, HeaderFroms\n| sort by Classification asc, Messages desc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Messages = sum(MessageCount),\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    Domains = make_set(Domain, 5),\n    HeaderFroms = make_set(HeaderFrom, 5),\n    SpfDomains = make_set(SpfDomain, 3)\n    by SourceIP\n| extend SpfDomain = tostring(SpfDomains[0])\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend Country = tostring(GeoInfo.country)\n| extend PassRate = round(100.0 * Pass / Messages, 1)\n| extend\n    Classification = case(\n        PassRate >= 95 and ServiceName != \"Unknown\", 'Authorized',\n        PassRate >= 50 and ServiceName != \"Unknown\", 'Needs Attention',\n        PassRate < 50 and ServiceName != \"Unknown\", 'Misconfigured',\n        PassRate < 50, 'Unknown / Suspicious',\n        'Unclassified'\n    )\n| top 100 by Messages desc\n| project SourceIP, Classification, ServiceName, Country, Messages, PassRate, Domains, HeaderFroms\n| sort by Classification asc, Messages desc",
               "size": 3,
               "title": "Top Senders - Authorized vs Unknown",
               "queryType": 0,
@@ -866,7 +979,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize Messages = sum(MessageCount) by SourceIP\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend ASN_Org = tolower(tostring(GeoInfo.asn_org))\n| extend Category = case(\n    ASN_Org has_any ('amazon', 'aws'), 'Cloud: AWS',\n    ASN_Org has_any ('microsoft', 'azure'), 'Cloud: Azure',\n    ASN_Org has_any ('google', 'gcp'), 'Cloud: Google',\n    ASN_Org has_any ('digitalocean'), 'Cloud: DigitalOcean',\n    ASN_Org has_any ('sendgrid'), 'ESP: SendGrid',\n    ASN_Org has_any ('mailchimp', 'intuit'), 'ESP: Mailchimp',\n    ASN_Org has_any ('mailgun'), 'ESP: Mailgun',\n    ASN_Org has_any ('salesforce', 'exacttarget'), 'ESP: Salesforce',\n    ASN_Org has_any ('hubspot'), 'ESP: HubSpot',\n    ASN_Org has_any ('mimecast'), 'Security: Mimecast',\n    ASN_Org has_any ('proofpoint'), 'Security: Proofpoint',\n    ASN_Org has_any ('barracuda'), 'Security: Barracuda',\n    ASN_Org has_any ('cloudflare'), 'Infra: Cloudflare',\n    ASN_Org has_any ('ovh'), 'Hosting: OVH',\n    ASN_Org has_any ('hetzner'), 'Hosting: Hetzner',\n    ASN_Org has_any ('godaddy'), 'Hosting: GoDaddy',\n    'Other'\n)\n| summarize Messages = sum(Messages), UniqueIPs = dcount(SourceIP) by Category\n| sort by Messages desc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize Messages = sum(MessageCount), SpfDomains = make_set(SpfDomain, 3) by SourceIP\n| extend SpfDomain = tostring(SpfDomains[0])\n| extend Category = case(\n    SpfDomain has 'spf.protection.outlook.com', 'Email Platform: Microsoft 365',\n    SpfDomain has '_spf.google.com', 'Email Platform: Google Workspace',\n    SpfDomain has 'zoho.com', 'Email Platform: Zoho Mail',\n    SpfDomain has 'amazonses.com', 'ESP: Amazon SES',\n    SpfDomain has 'sendgrid.net', 'ESP: SendGrid',\n    SpfDomain has 'servers.mcsv.net', 'ESP: Mailchimp',\n    SpfDomain has 'mandrillapp.com', 'ESP: Mandrill',\n    SpfDomain has 'mailgun.org', 'ESP: Mailgun',\n    SpfDomain has 'spf.mtasv.net', 'ESP: Postmark',\n    SpfDomain has '_spf.sparkpostmail.com', 'ESP: SparkPost',\n    SpfDomain has 'sendinblue.com', 'ESP: Brevo',\n    SpfDomain has 'spf.constantcontact.com', 'ESP: Constant Contact',\n    SpfDomain has 'cmail1.com', 'ESP: Campaign Monitor',\n    SpfDomain has '_spf.salesforce.com', 'CRM: Salesforce',\n    SpfDomain has 'marketing.dynamics.com', 'CRM: Dynamics 365',\n    SpfDomain has 'hubspotemail.net', 'CRM: HubSpot',\n    SpfDomain has 'service-now.com', 'SaaS: ServiceNow',\n    SpfDomain has 'mail.zendesk.com', 'SaaS: Zendesk',\n    SpfDomain has 'email.freshdesk.com', 'SaaS: Freshdesk',\n    SpfDomain has 'pphosted.com', 'Security: Proofpoint',\n    SpfDomain has '_netblocks.mimecast.com', 'Security: Mimecast',\n    isempty(SpfDomain), 'Unknown',\n    'Other'\n)\n| summarize Messages = sum(Messages), UniqueIPs = dcount(SourceIP) by Category\n| sort by Messages desc",
               "size": 3,
               "title": "Source IP Classification by Provider",
               "queryType": 0,
@@ -935,7 +1048,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet lookback = 30d;\nlet recentWindow = 1d;\nlet baseline = DMARCReports_CL\n| where TimeGenerated between (ago(lookback) .. ago(recentWindow))\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize DailyMessages = sum(MessageCount) by SourceIP, bin(TimeGenerated, 1d)\n| summarize\n    AvgDailyVolume = avg(DailyMessages),\n    StdDevVolume = stdev(DailyMessages),\n    DaysActive = dcount(TimeGenerated)\n    by SourceIP\n| where DaysActive >= 3;\nlet recent = DMARCReports_CL\n| where TimeGenerated > ago(recentWindow)\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize RecentMessages = sum(MessageCount) by SourceIP;\nbaseline\n| join kind=inner recent on SourceIP\n| extend\n    ZScore = iff(StdDevVolume > 0, round((RecentMessages - AvgDailyVolume) / StdDevVolume, 2), 0.0),\n    VolumeMultiple = round(RecentMessages / AvgDailyVolume, 1)\n| where ZScore > 2.0 or VolumeMultiple > 3.0\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend ASN_Org = tostring(GeoInfo.asn_org), Country = tostring(GeoInfo.country)\n| project SourceIP, ASN_Org, Country, RecentMessages, AvgDailyVolume = round(AvgDailyVolume, 0), VolumeMultiple, ZScore, DaysActive\n| sort by ZScore desc\n| take 25",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet lookback = 30d;\nlet recentWindow = 1d;\nlet baseline = DMARCReports_CL\n| where TimeGenerated between (ago(lookback) .. ago(recentWindow))\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize DailyMessages = sum(MessageCount) by SourceIP, bin(TimeGenerated, 1d)\n| summarize\n    AvgDailyVolume = avg(DailyMessages),\n    StdDevVolume = stdev(DailyMessages),\n    DaysActive = dcount(TimeGenerated)\n    by SourceIP\n| where DaysActive >= 3;\nlet recent = DMARCReports_CL\n| where TimeGenerated > ago(recentWindow)\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize RecentMessages = sum(MessageCount), SpfDomains = make_set(SpfDomain, 1) by SourceIP;\nbaseline\n| join kind=inner recent on SourceIP\n| extend\n    ZScore = iff(StdDevVolume > 0, round((RecentMessages - AvgDailyVolume) / StdDevVolume, 2), 0.0),\n    VolumeMultiple = round(RecentMessages / AvgDailyVolume, 1)\n| where ZScore > 2.0 or VolumeMultiple > 3.0\n| extend SpfDomain = tostring(SpfDomains[0])\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend Country = tostring(GeoInfo.country)\n| project SourceIP, ServiceName, Country, RecentMessages, AvgDailyVolume = round(AvgDailyVolume, 0), VolumeMultiple, ZScore, DaysActive\n| sort by ZScore desc\n| take 25",
               "size": 3,
               "title": "Volume Anomaly Detection (Last 24h vs 30d Baseline)",
               "queryType": 0,
@@ -972,7 +1085,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Messages = sum(MessageCount),\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    Domains = make_set(Domain, 5)\n    by SourceIP\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend\n    PassRate = round(100.0 * Pass / Messages, 1),\n    ASN_Org = tostring(GeoInfo.asn_org),\n    Country = tostring(GeoInfo.country)\n| top 50 by Messages desc\n| project SourceIP, Messages, PassRate, ASN_Org, Country,\n    ReputationLookup = strcat('https://talosintelligence.com/reputation_center/lookup?search=', SourceIP),\n    Domains",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Messages = sum(MessageCount),\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    Domains = make_set(Domain, 5)\n    by SourceIP, SpfDomain\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend\n    PassRate = round(100.0 * Pass / Messages, 1),\n    Country = tostring(GeoInfo.country)\n| top 50 by Messages desc\n| project SourceIP, Messages, PassRate, ServiceName, Country,\n    ReputationLookup = strcat('https://talosintelligence.com/reputation_center/lookup?search=', SourceIP),\n    Domains",
               "size": 3,
               "title": "Top 50 Source IPs (with Reputation Lookup)",
               "queryType": 0,
@@ -1018,7 +1131,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'\n| summarize\n    FailedMessages = sum(MessageCount),\n    Domains = make_set(Domain),\n    HeaderFroms = make_set(HeaderFrom)\n    by SourceIP\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend\n    ASN = tostring(GeoInfo.asn),\n    ASN_Org = tostring(GeoInfo.asn_org),\n    Country = tostring(GeoInfo.country)\n| top 25 by FailedMessages desc\n| project SourceIP, FailedMessages, ASN, ASN_Org, Country, HeaderFroms, Domains",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'\n| summarize\n    FailedMessages = sum(MessageCount),\n    Domains = make_set(Domain),\n    HeaderFroms = make_set(HeaderFrom)\n    by SourceIP, SpfDomain\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| extend GeoInfo = geo_info_from_ip_address(SourceIP)\n| extend Country = tostring(GeoInfo.country)\n| top 25 by FailedMessages desc\n| project SourceIP, FailedMessages, ServiceName, Country, HeaderFroms, Domains",
               "size": 3,
               "title": "Suspicious IPs (Both SPF & DKIM Failing)",
               "queryType": 0,
@@ -1142,7 +1255,7 @@
           {
             "type": 1,
             "content": {
-              "json": "### Compliance Scoring"
+              "json": "### Compliance Scoring\nEach domain receives a **Compliance Score** (0–100) based on a weighted formula:\n\n`Score = 0.40 × DMARC Pass Rate + 0.25 × SPF Pass Rate + 0.25 × DKIM Pass Rate + 0.10 × Policy Score`\n\n**Policy Score:** `p=reject` = 100 · `p=quarantine` = 60 · `p=none` = 20\n\nThe score rewards domains that have **both** SPF and DKIM properly configured (defense-in-depth) and are enforcing their DMARC policy. A domain relying on only one mechanism or still using `p=none` will score lower even with a high overall DMARC pass rate.\n\n**Risk Levels:** Low (90+) · Moderate (70–89) · High (50–69) · Critical (<50)"
             },
             "name": "domain-scoring-header"
           },
@@ -1216,7 +1329,7 @@
           {
             "type": 1,
             "content": {
-              "json": "### Policy Progression"
+              "json": "### Policy Progression\n\n**Column guide:**\n- **PassRate** — percentage of messages where SPF or DKIM passed DMARC alignment\n- **AdjustedPassRate** — PassRate but counting forwarding overrides (forwarded, mailing list, trusted forwarder) as passes, since these are expected failures, not real threats\n- **ForwardingOverrides** — messages that failed DMARC but were flagged by the receiver as forwarded/mailing list mail\n- **DaysWithData** — number of distinct days with report data in the last 30 days (more days = higher confidence in the recommendation)\n- **SuspiciousIPs** — unique source IPs where both SPF and DKIM failed"
             },
             "name": "domain-policy-header"
           },
@@ -1224,7 +1337,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated > ago(30d)\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Messages = sum(MessageCount),\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    UniqueIPs = dcount(SourceIP),\n    SuspiciousIPs = dcountif(SourceIP, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    ForwardingOverrides = sumif(MessageCount, PolicyEvaluated_reason_type has_any ('forwarded', 'mailing_list', 'trusted_forwarder')),\n    DaysWithData = dcount(bin(TimeGenerated, 1d)),\n    arg_max(TimeGenerated, PolicyPublished_p, PolicyPublished_sp)\n    by Domain\n| extend\n    PassRate = round(100.0 * Pass / Messages, 1),\n    AdjustedPassRate = round(100.0 * (Pass + ForwardingOverrides) / Messages, 1)\n| extend\n    CurrentPolicy = PolicyPublished_p,\n    RecommendedAction = case(\n        PolicyPublished_p == 'reject' and PassRate >= 99, 'Maintain - Fully Enforced',\n        PolicyPublished_p == 'reject' and PassRate < 99, 'Review - Reject active but pass rate below 99%',\n        PolicyPublished_p == 'quarantine' and AdjustedPassRate >= 99 and DaysWithData >= 30, 'Ready for p=reject',\n        PolicyPublished_p == 'quarantine' and AdjustedPassRate >= 95, 'Almost Ready - Improve to 99%+ before reject',\n        PolicyPublished_p == 'quarantine', 'Not Ready - Fix auth failures first',\n        PolicyPublished_p == 'none' and AdjustedPassRate >= 97 and DaysWithData >= 14, 'Ready for p=quarantine',\n        PolicyPublished_p == 'none' and AdjustedPassRate >= 90, 'Almost Ready - Improve to 97%+ before quarantine',\n        PolicyPublished_p == 'none', 'Not Ready - Fix auth failures first',\n        'Check configuration'\n    )\n| project Domain, CurrentPolicy, PassRate, AdjustedPassRate, RecommendedAction,\n    Messages, Fail, ForwardingOverrides, DaysWithData, SuspiciousIPs\n| sort by Domain asc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated > ago(30d)\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Messages = sum(MessageCount),\n    Pass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    Fail = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    UniqueIPs = dcount(SourceIP),\n    SuspiciousIPs = dcountif(SourceIP, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    ForwardingOverrides = sumif(MessageCount, PolicyEvaluated_reason_type has_any ('forwarded', 'mailing_list', 'trusted_forwarder')),\n    DaysWithData = dcount(bin(TimeGenerated, 1d)),\n    arg_max(TimeGenerated, PolicyPublished_p, PolicyPublished_sp)\n    by Domain\n| extend\n    PassRate = round(100.0 * Pass / Messages, 1),\n    AdjustedPassRate = round(100.0 * (Pass + ForwardingOverrides) / Messages, 1)\n| extend\n    CurrentPolicy = PolicyPublished_p,\n    RecommendedAction = case(\n        PolicyPublished_p == 'reject' and PassRate >= 99, 'Maintain - Fully Enforced',\n        PolicyPublished_p == 'reject' and PassRate < 99, 'Review - Reject active but pass rate below 99%',\n        PolicyPublished_p == 'quarantine' and AdjustedPassRate >= 99 and DaysWithData >= 14, 'Ready for p=reject',\n        PolicyPublished_p == 'quarantine' and AdjustedPassRate >= 95, 'Almost Ready - Improve to 99%+ before reject',\n        PolicyPublished_p == 'quarantine', 'Not Ready - Fix auth failures first',\n        PolicyPublished_p == 'none' and AdjustedPassRate >= 97 and DaysWithData >= 14, 'Ready for p=quarantine',\n        PolicyPublished_p == 'none' and AdjustedPassRate >= 90, 'Almost Ready - Improve to 97%+ before quarantine',\n        PolicyPublished_p == 'none', 'Not Ready - Fix auth failures first',\n        'Check configuration'\n    )\n| project Domain, CurrentPolicy, PassRate, AdjustedPassRate, RecommendedAction,\n    Messages, Fail, ForwardingOverrides, DaysWithData, SuspiciousIPs\n| sort by Domain asc",
               "size": 3,
               "title": "Domain Readiness for Policy Enforcement (Last 30 Days)",
               "queryType": 0,
@@ -1289,7 +1402,7 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize Messages = sum(MessageCount) by bin(TimeGenerated, 1d), PolicyEvaluated_disposition\n| sort by TimeGenerated asc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize Messages = sum(MessageCount) by bin(ReportDateRangeBegin, 1d), PolicyEvaluated_disposition\n| project TimeGenerated = ReportDateRangeBegin, Messages, PolicyEvaluated_disposition\n| sort by TimeGenerated asc",
               "size": 3,
               "title": "Disposition Over Time",
               "queryType": 0,
@@ -1332,6 +1445,66 @@
               "visualization": "table"
             },
             "name": "published-policies"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "### DMARC Policy Health Check\nAnalysis of your published DMARC policy configuration with actionable recommendations. Each issue identified below represents a potential gap in your email authentication posture."
+            },
+            "name": "policy-health-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize arg_max(TimeGenerated, *) by Domain\n| extend Issues = dynamic([])\n| extend Issues = iff(PolicyPublished_p == 'none', array_concat(Issues, dynamic([\"Policy is p=none: spoofed mail will be delivered. Progress toward p=quarantine.\"])), Issues)\n| extend Issues = iff(PolicyPublished_p == 'quarantine', array_concat(Issues, dynamic([\"Policy is p=quarantine: spoofed mail goes to junk. Consider p=reject when pass rate is 99%+.\"])), Issues)\n| extend Issues = iff(PolicyPublished_pct > 0 and PolicyPublished_pct < 100, array_concat(Issues, pack_array(strcat(\"pct=\", PolicyPublished_pct, \": policy only applied to \", PolicyPublished_pct, \"% of failing mail. Increase gradually to 100.\"))), Issues)\n| extend Issues = iff(isempty(PolicyPublished_sp) or PolicyPublished_sp == 'none', array_concat(Issues, dynamic([\"No subdomain policy (sp=none or absent): subdomains can be spoofed. Set sp= to match or exceed p=.\"])), Issues)\n| mv-expand Issue = Issues\n| where isnotempty(tostring(Issue))\n| project Domain, Issue = tostring(Issue), Policy = PolicyPublished_p, SubdomainPolicy = coalesce(PolicyPublished_sp, 'inherited'), Pct = PolicyPublished_pct, DKIM_Alignment = coalesce(PolicyPublished_adkim, 'r'), SPF_Alignment = coalesce(PolicyPublished_aspf, 'r')\n| sort by Domain asc",
+              "size": 3,
+              "title": "DMARC Policy Health Check",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "{Workspace}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Issue",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        {
+                          "operator": "contains",
+                          "thresholdValue": "p=none",
+                          "representation": "redBright",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "contains",
+                          "thresholdValue": "spoofed",
+                          "representation": "orange",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "contains",
+                          "thresholdValue": "pct=",
+                          "representation": "yellow",
+                          "text": "{0}{1}"
+                        },
+                        {
+                          "operator": "Default",
+                          "thresholdValue": null,
+                          "representation": "blue",
+                          "text": "{0}{1}"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "policy-health-check"
           },
           {
             "type": 1,
@@ -1494,6 +1667,49 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet known = DMARCReports_CL\n| where TimeGenerated between (ago(30d) .. ago(7d))\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where isnotempty(HeaderFrom)\n| distinct Subdomain = tolower(HeaderFrom);\nDMARCReports_CL\n| where TimeGenerated > ago(7d)\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where isnotempty(HeaderFrom)\n| extend Subdomain = tolower(HeaderFrom)\n| where Subdomain !in (known)\n| summarize\n    Messages = sum(MessageCount),\n    PassedMessages = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),\n    FailedMessages = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    UniqueIPs = dcount(SourceIP),\n    SpfDomains = make_set(SpfDomain, 3)\n    by Subdomain\n| extend\n    PassRate = round(100.0 * PassedMessages / Messages, 1),\n    SpfDomain = tostring(SpfDomains[0])\n| extend ServiceName = case(\n    SpfDomain has \"spf.protection.outlook.com\", \"Microsoft 365\",\n    SpfDomain has \"_spf.google.com\", \"Google Workspace\",\n    SpfDomain has \"amazonses.com\", \"Amazon SES\",\n    SpfDomain has \"sendgrid.net\", \"SendGrid\",\n    SpfDomain has \"servers.mcsv.net\", \"Mailchimp\",\n    SpfDomain has \"mandrillapp.com\", \"Mandrill\",\n    SpfDomain has \"mailgun.org\", \"Mailgun\",\n    SpfDomain has \"spf.mtasv.net\", \"Postmark\",\n    SpfDomain has \"_spf.sparkpostmail.com\", \"SparkPost\",\n    SpfDomain has \"_spf.salesforce.com\", \"Salesforce\",\n    SpfDomain has \"service-now.com\", \"ServiceNow\",\n    SpfDomain has \"mail.zendesk.com\", \"Zendesk\",\n    SpfDomain has \"email.freshdesk.com\", \"Freshdesk\",\n    SpfDomain has \"spf.constantcontact.com\", \"Constant Contact\",\n    SpfDomain has \"sendinblue.com\", \"Brevo\",\n    SpfDomain has \"cmail1.com\", \"Campaign Monitor\",\n    SpfDomain has \"pphosted.com\", \"Proofpoint\",\n    SpfDomain has \"_netblocks.mimecast.com\", \"Mimecast\",\n    SpfDomain has \"zoho.com\", \"Zoho Mail\",\n    SpfDomain has \"marketing.dynamics.com\", \"Dynamics 365 Marketing\",\n    SpfDomain has \"hubspotemail.net\", \"HubSpot\",\n    isnotempty(SpfDomain), SpfDomain,\n    \"Unknown\"\n)\n| project Subdomain, Messages, PassRate, FailedMessages, UniqueIPs, ServiceName\n| sort by Messages desc\n| take 50",
+              "size": 3,
+              "title": "New Subdomains (Last 7 Days vs Previous 30 Days)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "{Workspace}"
+              ],
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "PassRate",
+                    "formatter": 8,
+                    "formatOptions": {
+                      "palette": "redGreen"
+                    }
+                  }
+                ]
+              }
+            },
+            "name": "new-subdomains"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where isnotempty(HeaderFrom) and HeaderFrom != Domain\n| extend Subdomain = tolower(HeaderFrom)\n| summarize\n    Messages = sum(MessageCount),\n    FailedMessages = sumif(MessageCount, PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'),\n    arg_max(TimeGenerated, PolicyPublished_sp, PolicyPublished_p)\n    by Subdomain, Domain\n| where isempty(PolicyPublished_sp) or PolicyPublished_sp == 'none'\n| extend\n    PassRate = round(100.0 * (Messages - FailedMessages) / Messages, 1),\n    Gap = case(\n        isempty(PolicyPublished_sp), strcat('No sp= tag on ', Domain, ': subdomain inherits p=', PolicyPublished_p),\n        PolicyPublished_sp == 'none', strcat('sp=none on ', Domain, ': subdomain mail is not enforced'),\n        'Review configuration'\n    )\n| project Subdomain, Domain, Messages, PassRate, FailedMessages, Gap\n| sort by FailedMessages desc\n| take 50",
+              "size": 3,
+              "title": "Subdomain Policy Gaps",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "crossComponentResources": [
+                "{Workspace}"
+              ],
+              "visualization": "table"
+            },
+            "name": "subdomain-policy-gaps"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
               "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| where isnotempty(EnvelopeFrom) and HeaderFrom != EnvelopeFrom\n| where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'\n| summarize\n    SpoofedMessages = sum(MessageCount),\n    SourceIPs = make_set(SourceIP, 10)\n    by HeaderFrom, EnvelopeFrom\n| sort by SpoofedMessages desc\n| take 50",
               "size": 3,
               "title": "Potential Spoofing (Header/Envelope Mismatch + Auth Fail)",
@@ -1592,9 +1808,9 @@
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated > ago(90d)\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    LastReportTime = max(TimeGenerated),\n    TotalReports = dcount(ReportId),\n    TotalMessages = sum(MessageCount),\n    AvgDailyReports = round(1.0 * dcount(ReportId) / max_of(datetime_diff('day', max(TimeGenerated), min(TimeGenerated)), 1), 1)\n    by ReportOrgName\n| extend\n    HoursSinceLastReport = datetime_diff('hour', now(), LastReportTime),\n    Freshness = case(\n        datetime_diff('hour', now(), LastReportTime) <= 28, 'Fresh',\n        datetime_diff('hour', now(), LastReportTime) <= 72, 'Normal',\n        datetime_diff('day', now(), LastReportTime) <= 7, 'Delayed',\n        'Stale'\n    )\n| project ReportOrgName, Freshness, LastReportTime, HoursSinceLastReport, TotalReports, TotalMessages, AvgDailyReports\n| sort by HoursSinceLastReport desc",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    LastReport = max(TimeGenerated),\n    FirstReport = min(TimeGenerated),\n    TotalReports = dcount(ReportId),\n    TotalMessages = sum(MessageCount),\n    AvgDailyReports = round(1.0 * dcount(ReportId) / max_of(datetime_diff('day', max(TimeGenerated), min(TimeGenerated)), 1), 1),\n    DomainsReported = make_set(Domain, 10)\n    by ReportOrgName\n| extend\n    DaysSinceLastReport = datetime_diff('day', now(), LastReport),\n    Freshness = case(\n        datetime_diff('day', now(), LastReport) <= 1, 'Fresh',\n        datetime_diff('day', now(), LastReport) <= 3, 'Normal',\n        datetime_diff('day', now(), LastReport) <= 7, 'Delayed',\n        'Stale'\n    )\n| project ReportOrgName, Freshness, LastReport, FirstReport, DaysSinceLastReport, TotalReports, TotalMessages, AvgDailyReports, DomainsReported\n| sort by TotalMessages desc",
               "size": 3,
-              "title": "Report Freshness Monitor",
+              "title": "Reporter Overview",
               "queryType": 0,
               "resourceType": "microsoft.operationalinsights/workspaces",
               "crossComponentResources": [
@@ -1643,99 +1859,28 @@
                     }
                   }
                 ],
+                "filter": true,
                 "sortBy": [
                   {
-                    "itemKey": "HoursSinceLastReport",
+                    "itemKey": "TotalMessages",
                     "sortOrder": 2
                   }
                 ]
               },
               "sortBy": [
                 {
-                  "itemKey": "HoursSinceLastReport",
+                  "itemKey": "TotalMessages",
                   "sortOrder": 2
                 }
               ]
             },
-            "name": "report-freshness"
-          },
-          {
-            "type": 1,
-            "content": {
-              "json": "### Coverage Analysis"
-            },
-            "name": "reporting-coverage-header"
+            "name": "reporter-overview"
           },
           {
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nDMARCReports_CL\n| where TimeGenerated {TimeRange}\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| summarize\n    Reports = dcount(ReportId),\n    Messages = sum(MessageCount),\n    LastReport = max(TimeGenerated),\n    FirstReport = min(TimeGenerated),\n    DomainsReported = make_set(Domain, 10)\n    by ReportOrgName\n| extend\n    DaysSinceLastReport = datetime_diff('day', now(), LastReport),\n    Status = case(\n        datetime_diff('hour', now(), LastReport) <= 48, 'Active',\n        datetime_diff('day', now(), LastReport) <= 7, 'Delayed',\n        'Stale'\n    )\n| project ReportOrgName, Status, Reports, Messages, LastReport, FirstReport, DaysSinceLastReport, DomainsReported\n| sort by Messages desc",
-              "size": 3,
-              "title": "Reporter Coverage Analysis",
-              "queryType": 0,
-              "resourceType": "microsoft.operationalinsights/workspaces",
-              "crossComponentResources": [
-                "{Workspace}"
-              ],
-              "visualization": "table",
-              "gridSettings": {
-                "formatters": [
-                  {
-                    "columnMatch": "Status",
-                    "formatter": 18,
-                    "formatOptions": {
-                      "thresholdsOptions": "colors",
-                      "thresholdsGrid": [
-                        {
-                          "operator": "==",
-                          "thresholdValue": "Active",
-                          "representation": "green",
-                          "text": "{0}{1}"
-                        },
-                        {
-                          "operator": "==",
-                          "thresholdValue": "Delayed",
-                          "representation": "orange",
-                          "text": "{0}{1}"
-                        },
-                        {
-                          "operator": "==",
-                          "thresholdValue": "Stale",
-                          "representation": "redBright",
-                          "text": "{0}{1}"
-                        },
-                        {
-                          "operator": "Default",
-                          "thresholdValue": null,
-                          "representation": "blue",
-                          "text": "{0}{1}"
-                        }
-                      ]
-                    }
-                  }
-                ],
-                "sortBy": [
-                  {
-                    "itemKey": "Messages",
-                    "sortOrder": 2
-                  }
-                ]
-              },
-              "sortBy": [
-                {
-                  "itemKey": "Messages",
-                  "sortOrder": 2
-                }
-              ]
-            },
-            "name": "reporter-coverage"
-          },
-          {
-            "type": 3,
-            "content": {
-              "version": "KqlItem/1.0",
-              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet expectedReporters = dynamic(['google.com', 'Enterprise Outlook', 'yahoo.com', 'comcast.net', 'apple.com', 'fastmail.com', 'zoho.com']);\nlet activeReporters = DMARCReports_CL\n| where TimeGenerated > ago(30d)\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter)\n| distinct tolower(ReportOrgName);\nprint ExpectedReporters = expectedReporters\n| mv-expand Reporter = ExpectedReporters\n| extend Reporter = tostring(Reporter)\n| where Reporter !in (activeReporters)\n| project MissingReporter = Reporter, Note = 'No reports received in the last 30 days. Check DMARC DNS record rua tag.'",
+              "query": "let domainFilter = dynamic([{Domain}]);\nlet reporterFilter = dynamic([{Reporter}]);\nlet allData = DMARCReports_CL\n| where '*' in (domainFilter) or Domain in (domainFilter)\n| where '*' in (reporterFilter) or ReportOrgName in (reporterFilter);\nlet historicalReporters = allData\n| where TimeGenerated between (ago(90d) .. ago(30d))\n| summarize LastSeenBefore30d = max(TimeGenerated), Messages = sum(MessageCount) by ReportOrgName;\nlet recentReporters = allData\n| where TimeGenerated > ago(30d)\n| distinct ReportOrgName;\nhistoricalReporters\n| where ReportOrgName !in (recentReporters)\n| project MissingReporter = ReportOrgName, LastSeen = LastSeenBefore30d, PreviousMessages = Messages, Note = 'Previously active reporter has not sent reports in the last 30 days.'\n| sort by PreviousMessages desc",
               "size": 3,
               "title": "Missing Expected Reporters (Last 30 Days)",
               "queryType": 0,

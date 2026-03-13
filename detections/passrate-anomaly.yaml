@@ -1,0 +1,50 @@
+id: c3d4e5f6-a7b8-4c9d-0e1f-2a3b4c5d6e7f
+name: DMARC - Per-Domain Pass Rate Anomaly
+description: |
+  Detects when a domain's DMARC pass rate drops significantly below its 14-day baseline.
+  A sudden drop may indicate a new spoofing campaign or a misconfigured sender.
+  Triggers when pass rate drops more than 15 percentage points below baseline AND falls below 90%.
+severity: Medium
+requiredDataConnectors:
+  - connectorId: CustomLogsAma
+    dataTypes:
+      - DMARCReports_CL
+queryFrequency: PT1H
+queryPeriod: P14D
+triggerOperator: gt
+triggerThreshold: 0
+status: Available
+tactics:
+  - InitialAccess
+relevantTechniques:
+  - T1566
+query: |
+  let baseline = DMARCReports_CL
+  | where TimeGenerated between (ago(14d) .. ago(1d))
+  | summarize
+      BaselinePass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),
+      BaselineTotal = sum(MessageCount)
+      by Domain
+  | where BaselineTotal >= 100
+  | extend BaselinePassRate = round(100.0 * BaselinePass / BaselineTotal, 1);
+  let recent = DMARCReports_CL
+  | where TimeGenerated > ago(1d)
+  | summarize
+      RecentPass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),
+      RecentTotal = sum(MessageCount)
+      by Domain
+  | where RecentTotal >= 10
+  | extend RecentPassRate = round(100.0 * RecentPass / RecentTotal, 1);
+  baseline
+  | join kind=inner recent on Domain
+  | where RecentPassRate < BaselinePassRate - 15
+  | where RecentPassRate < 90
+  | extend PassRateDrop = round(BaselinePassRate - RecentPassRate, 1)
+  | project Domain, BaselinePassRate, RecentPassRate, PassRateDrop, RecentTotal
+entityMappings:
+  - entityType: DNS
+    fieldMappings:
+      - identifier: DomainName
+        columnName: Domain
+version: 1.0.0
+kind: Scheduled

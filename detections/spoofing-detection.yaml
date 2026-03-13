@@ -1,0 +1,37 @@
+id: a1c2d3e4-f5a6-4b7c-8d9e-0f1a2b3c4d5e
+name: DMARC - High-Volume Authentication Failures (Spoofing Indicator)
+description: |
+  Detects high-volume DMARC authentication failures from a single source IP targeting protected domains.
+  This may indicate a spoofing or phishing campaign impersonating your domain.
+  Tune the FailedMessages threshold based on your environment's volume.
+severity: Medium
+requiredDataConnectors:
+  - connectorId: CustomLogsAma
+    dataTypes:
+      - DMARCReports_CL
+queryFrequency: PT1H
+queryPeriod: PT1H
+triggerOperator: gt
+triggerThreshold: 0
+status: Available
+tactics:
+  - InitialAccess
+relevantTechniques:
+  - T1566
+query: |
+  DMARCReports_CL
+  | where TimeGenerated > ago(1h)
+  | where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'
+  | summarize
+      FailedMessages = sum(MessageCount),
+      Domains = make_set(Domain, 10),
+      HeaderFroms = make_set(HeaderFrom, 10)
+      by SourceIP
+  | where FailedMessages >= 50
+entityMappings:
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: SourceIP
+version: 1.0.0
+kind: Scheduled

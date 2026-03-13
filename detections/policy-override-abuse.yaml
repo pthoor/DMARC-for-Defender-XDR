@@ -1,0 +1,39 @@
+id: d4e5f6a7-b8c9-4d0e-1f2a-3b4c5d6e7f80
+name: DMARC - Unusual Policy Override Reasons
+description: |
+  Detects unusual or unexpected DMARC policy override reasons. While legitimate overrides exist
+  (forwarded, mailing_list, trusted_forwarder, local_policy, sampled_out), unexpected override
+  reasons may indicate policy bypass or misconfiguration at the receiving mail server.
+severity: Low
+requiredDataConnectors:
+  - connectorId: CustomLogsAma
+    dataTypes:
+      - DMARCReports_CL
+queryFrequency: PT6H
+queryPeriod: PT6H
+triggerOperator: gt
+triggerThreshold: 0
+status: Available
+tactics:
+  - DefenseEvasion
+relevantTechniques:
+  - T1562
+query: |
+  DMARCReports_CL
+  | where TimeGenerated > ago(6h)
+  | where isnotempty(PolicyEvaluated_reason_type)
+  | where PolicyEvaluated_reason_type !has_any ('forwarded', 'mailing_list', 'trusted_forwarder', 'local_policy', 'sampled_out')
+  | summarize
+      OverriddenMessages = sum(MessageCount),
+      Domains = make_set(Domain, 10),
+      SourceIPs = make_set(SourceIP, 10),
+      ReasonComments = make_set(PolicyEvaluated_reason_comment, 5)
+      by PolicyEvaluated_reason_type
+  | where OverriddenMessages >= 5
+entityMappings:
+  - entityType: IP
+    fieldMappings:
+      - identifier: Address
+        columnName: SourceIPs
+version: 1.0.0
+kind: Scheduled

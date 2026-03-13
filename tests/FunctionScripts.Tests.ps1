@@ -401,7 +401,7 @@ Describe 'BackfillProcessor/run.ps1' {
             $content = Get-Content $scriptPath -Raw
             $content | Should -Match 'Request\.Query\.days'
             $content | Should -Match '\[int\]::TryParse'
-            $content | Should -Match 'between 1 and 30'
+            $content | Should -Match 'between 1 and 365'
         }
 
         It 'Should default days to 7' {
