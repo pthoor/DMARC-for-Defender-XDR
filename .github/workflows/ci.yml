@@ -57,7 +57,7 @@ jobs:
           $warnings += Invoke-ScriptAnalyzer -Path ./src -Recurse -Severity Warning
           $warnings += Invoke-ScriptAnalyzer -Path ./scripts -Recurse -Severity Warning
           if ($warnings.Count -gt 0) {
-            Write-Warning "PSScriptAnalyzer found $($warnings.Count) warning(s) — not blocking CI."
+            Write-Warning "PSScriptAnalyzer found $($warnings.Count) warning(s) - not blocking CI."
             $warnings | Format-Table -AutoSize
           }
 
@@ -95,8 +95,8 @@ jobs:
             'secret\s*=','
             'api_key\s*=','
             'connectionstring\s*=','
-            'AKIA[0-9A-Z]{16}','
-            'ghp_[a-zA-Z0-9]{36}','
+            'AKIA[0-9A-Z]{16}',
+            'ghp_[a-zA-Z0-9]{36}',
             'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'
           )
           $excludeArgs = @(
@@ -109,7 +109,7 @@ jobs:
           $findings = @()
           foreach ($pattern in $patterns) {
             $result = git grep -n -E $pattern @excludeArgs 2>&1
-            if ($result) {
+            if ($LASTEXITCODE -eq 0 -and $result) {
               $findings += $result
             }
           }
