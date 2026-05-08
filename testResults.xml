@@ -1,0 +1,393 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-results xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="nunit_schema_2.5.xsd" name="Pester" total="152" errors="0" failures="0" not-run="0" inconclusive="0" ignored="0" skipped="0" invalid="0" date="2026-05-08" time="19:20:15">
+  <environment user-domain="" os-version="6.17.0-1010-azure" machine-name="runnervmeorf1" platform="Linux" cwd="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure" nunit-version="2.5.8.0" clr-version="8.0.25" user="runner" />
+  <culture-info current-culture="" current-uiculture="" />
+  <test-suite type="TestFixture" name="Pester" executed="True" result="Success" success="True" time="2.1509" asserts="0" description="Pester">
+    <results>
+      <test-suite type="TestFixture" name="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/DmarcHelpers.Tests.ps1" executed="True" result="Success" success="True" time="1.0056" asserts="0" description="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/DmarcHelpers.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="DmarcHelpers Module" executed="True" result="Success" success="True" time="0.6879" asserts="0" description="DmarcHelpers Module">
+            <results>
+              <test-suite type="TestFixture" name="DmarcHelpers Module.Module Import" executed="True" result="Success" success="True" time="0.1379" asserts="0" description="DmarcHelpers Module.Module Import">
+                <results>
+                  <test-case description="Should import the module successfully" name="DmarcHelpers Module.Module Import.Should import the module successfully" time="0.0787" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should export expected functions" name="DmarcHelpers Module.Module Import.Should export expected functions" time="0.0369" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcHelpers Module.Get-ManagedIdentityToken" executed="True" result="Success" success="True" time="0.2506" asserts="0" description="DmarcHelpers Module.Get-ManagedIdentityToken">
+                <results>
+                  <test-case description="Should require IDENTITY_ENDPOINT environment variable" name="DmarcHelpers Module.Get-ManagedIdentityToken.Should require IDENTITY_ENDPOINT environment variable" time="0.0998" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should require IDENTITY_HEADER environment variable" name="DmarcHelpers Module.Get-ManagedIdentityToken.Should require IDENTITY_HEADER environment variable" time="0.0098" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcHelpers Module.ConvertFrom-DmarcXml" executed="True" result="Success" success="True" time="0.4019" asserts="0" description="DmarcHelpers Module.ConvertFrom-DmarcXml">
+                <results>
+                  <test-case description="Should parse valid DMARC XML" name="DmarcHelpers Module.ConvertFrom-DmarcXml.Should parse valid DMARC XML" time="0.1237" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should parse XML with multiple records" name="DmarcHelpers Module.ConvertFrom-DmarcXml.Should parse XML with multiple records" time="0.0102" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle invalid XML gracefully" name="DmarcHelpers Module.ConvertFrom-DmarcXml.Should handle invalid XML gracefully" time="0.0055" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle empty XML" name="DmarcHelpers Module.ConvertFrom-DmarcXml.Should handle empty XML" time="0.0036" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should prohibit DTD processing (security check)" name="DmarcHelpers Module.ConvertFrom-DmarcXml.Should prohibit DTD processing (security check)" time="0.0049" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcHelpers Module.Expand-DmarcAttachments" executed="True" result="Success" success="True" time="0.6434" asserts="0" description="DmarcHelpers Module.Expand-DmarcAttachments">
+                <results>
+                  <test-case description="Should handle XML attachments and return Xml key" name="DmarcHelpers Module.Expand-DmarcAttachments.Should handle XML attachments and return Xml key" time="0.037" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle GZIP attachments" name="DmarcHelpers Module.Expand-DmarcAttachments.Should handle GZIP attachments" time="0.0641" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should skip oversized attachments" name="DmarcHelpers Module.Expand-DmarcAttachments.Should skip oversized attachments" time="0.1197" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should skip non-file attachments" name="DmarcHelpers Module.Expand-DmarcAttachments.Should skip non-file attachments" time="0.01" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should skip unrecognized file extensions" name="DmarcHelpers Module.Expand-DmarcAttachments.Should skip unrecognized file extensions" time="0.0054" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcHelpers Module.Send-DmarcRecordsToLogAnalytics" executed="True" result="Success" success="True" time="0.6781" asserts="0" description="DmarcHelpers Module.Send-DmarcRecordsToLogAnalytics">
+                <results>
+                  <test-case description="Should require DCR_ENDPOINT environment variable" name="DmarcHelpers Module.Send-DmarcRecordsToLogAnalytics.Should require DCR_ENDPOINT environment variable" time="0.0135" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should require DCR_IMMUTABLE_ID environment variable" name="DmarcHelpers Module.Send-DmarcRecordsToLogAnalytics.Should require DCR_IMMUTABLE_ID environment variable" time="0.0076" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should require DCR_STREAM_NAME environment variable" name="DmarcHelpers Module.Send-DmarcRecordsToLogAnalytics.Should require DCR_STREAM_NAME environment variable" time="0.007" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/FunctionScripts.Tests.ps1" executed="True" result="Success" success="True" time="0.7214" asserts="0" description="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/FunctionScripts.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="DmarcReportProcessor/run.ps1" executed="True" result="Success" success="True" time="0.1356" asserts="0" description="DmarcReportProcessor/run.ps1">
+            <results>
+              <test-suite type="TestFixture" name="DmarcReportProcessor/run.ps1.Script Structure" executed="True" result="Success" success="True" time="0.0333" asserts="0" description="DmarcReportProcessor/run.ps1.Script Structure">
+                <results>
+                  <test-case description="Should exist" name="DmarcReportProcessor/run.ps1.Script Structure.Should exist" time="0.0047" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have valid PowerShell syntax" name="DmarcReportProcessor/run.ps1.Script Structure.Should have valid PowerShell syntax" time="0.014" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should accept eventGridEvent parameter" name="DmarcReportProcessor/run.ps1.Script Structure.Should accept eventGridEvent parameter" time="0.0067" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should import DmarcHelpers module" name="DmarcReportProcessor/run.ps1.Script Structure.Should import DmarcHelpers module" time="0.0043" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcReportProcessor/run.ps1.Security Validations" executed="True" result="Success" success="True" time="0.0519" asserts="0" description="DmarcReportProcessor/run.ps1.Security Validations">
+                <results>
+                  <test-case description="Should validate client state" name="DmarcReportProcessor/run.ps1.Security Validations.Should validate client state" time="0.006" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should warn if GRAPH_CLIENT_STATE is not configured" name="DmarcReportProcessor/run.ps1.Security Validations.Should warn if GRAPH_CLIENT_STATE is not configured" time="0.005" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should not log sensitive clientState value" name="DmarcReportProcessor/run.ps1.Security Validations.Should not log sensitive clientState value" time="0.0042" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcReportProcessor/run.ps1.Event Processing" executed="True" result="Success" success="True" time="0.0735" asserts="0" description="DmarcReportProcessor/run.ps1.Event Processing">
+                <results>
+                  <test-case description="Should extract message ID from event" name="DmarcReportProcessor/run.ps1.Event Processing.Should extract message ID from event" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle missing message ID" name="DmarcReportProcessor/run.ps1.Event Processing.Should handle missing message ID" time="0.0048" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should call Invoke-DmarcReportProcessing" name="DmarcReportProcessor/run.ps1.Event Processing.Should call Invoke-DmarcReportProcessing" time="0.0042" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle flexible event structure" name="DmarcReportProcessor/run.ps1.Event Processing.Should handle flexible event structure" time="0.0047" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcReportProcessor/run.ps1.Error Handling" executed="True" result="Success" success="True" time="0.1107" asserts="0" description="DmarcReportProcessor/run.ps1.Error Handling">
+                <results>
+                  <test-case description="Should wrap processing in try-catch" name="DmarcReportProcessor/run.ps1.Error Handling.Should wrap processing in try-catch" time="0.0237" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log errors with stack trace" name="DmarcReportProcessor/run.ps1.Error Handling.Should log errors with stack trace" time="0.0052" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should re-throw errors for Event Grid retry" name="DmarcReportProcessor/run.ps1.Error Handling.Should re-throw errors for Event Grid retry" time="0.0042" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="DmarcReportProcessor/run.ps1.Logging" executed="True" result="Success" success="True" time="0.1314" asserts="0" description="DmarcReportProcessor/run.ps1.Logging">
+                <results>
+                  <test-case description="Should log event type" name="DmarcReportProcessor/run.ps1.Logging.Should log event type" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log message ID being processed" name="DmarcReportProcessor/run.ps1.Logging.Should log message ID being processed" time="0.0062" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log success message" name="DmarcReportProcessor/run.ps1.Logging.Should log success message" time="0.0062" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="RenewGraphSubscription/run.ps1" executed="True" result="Success" success="True" time="0.2736" asserts="0" description="RenewGraphSubscription/run.ps1">
+            <results>
+              <test-suite type="TestFixture" name="RenewGraphSubscription/run.ps1.Script Structure" executed="True" result="Success" success="True" time="0.0295" asserts="0" description="RenewGraphSubscription/run.ps1.Script Structure">
+                <results>
+                  <test-case description="Should exist" name="RenewGraphSubscription/run.ps1.Script Structure.Should exist" time="0.0059" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have valid PowerShell syntax" name="RenewGraphSubscription/run.ps1.Script Structure.Should have valid PowerShell syntax" time="0.0065" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should accept Timer parameter" name="RenewGraphSubscription/run.ps1.Script Structure.Should accept Timer parameter" time="0.0063" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should import DmarcHelpers module" name="RenewGraphSubscription/run.ps1.Script Structure.Should import DmarcHelpers module" time="0.0059" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="RenewGraphSubscription/run.ps1.Configuration Validation" executed="True" result="Success" success="True" time="0.0511" asserts="0" description="RenewGraphSubscription/run.ps1.Configuration Validation">
+                <results>
+                  <test-case description="Should check for GRAPH_SUBSCRIPTION_ID" name="RenewGraphSubscription/run.ps1.Configuration Validation.Should check for GRAPH_SUBSCRIPTION_ID" time="0.0113" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should provide helpful error if subscription ID missing" name="RenewGraphSubscription/run.ps1.Configuration Validation.Should provide helpful error if subscription ID missing" time="0.0055" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="RenewGraphSubscription/run.ps1.Subscription Renewal" executed="True" result="Success" success="True" time="0.0783" asserts="0" description="RenewGraphSubscription/run.ps1.Subscription Renewal">
+                <results>
+                  <test-case description="Should get Managed Identity token" name="RenewGraphSubscription/run.ps1.Subscription Renewal.Should get Managed Identity token" time="0.0054" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set new expiration date" name="RenewGraphSubscription/run.ps1.Subscription Renewal.Should set new expiration date" time="0.0063" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should use PATCH method to update subscription" name="RenewGraphSubscription/run.ps1.Subscription Renewal.Should use PATCH method to update subscription" time="0.0054" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should target correct Graph API endpoint" name="RenewGraphSubscription/run.ps1.Subscription Renewal.Should target correct Graph API endpoint" time="0.0056" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="RenewGraphSubscription/run.ps1.Error Handling" executed="True" result="Success" success="True" time="0.1014" asserts="0" description="RenewGraphSubscription/run.ps1.Error Handling">
+                <results>
+                  <test-case description="Should wrap processing in try-catch" name="RenewGraphSubscription/run.ps1.Error Handling.Should wrap processing in try-catch" time="0.0066" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle 404 (subscription not found) specifically" name="RenewGraphSubscription/run.ps1.Error Handling.Should handle 404 (subscription not found) specifically" time="0.0065" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should re-throw for retry on other errors" name="RenewGraphSubscription/run.ps1.Error Handling.Should re-throw for retry on other errors" time="0.0054" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="RenewGraphSubscription/run.ps1.Timer Handling" executed="True" result="Success" success="True" time="0.117" asserts="0" description="RenewGraphSubscription/run.ps1.Timer Handling">
+                <results>
+                  <test-case description="Should check if timer is past due" name="RenewGraphSubscription/run.ps1.Timer Handling.Should check if timer is past due" time="0.0056" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should warn if timer is past due" name="RenewGraphSubscription/run.ps1.Timer Handling.Should warn if timer is past due" time="0.0058" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="RenewGraphSubscription/run.ps1.Logging" executed="True" result="Success" success="True" time="0.1333" asserts="0" description="RenewGraphSubscription/run.ps1.Logging">
+                <results>
+                  <test-case description="Should log renewal action" name="RenewGraphSubscription/run.ps1.Logging.Should log renewal action" time="0.0052" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log new expiration" name="RenewGraphSubscription/run.ps1.Logging.Should log new expiration" time="0.0062" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="CatchupProcessor/run.ps1" executed="True" result="Success" success="True" time="0.447" asserts="0" description="CatchupProcessor/run.ps1">
+            <results>
+              <test-suite type="TestFixture" name="CatchupProcessor/run.ps1.Script Structure" executed="True" result="Success" success="True" time="0.0449" asserts="0" description="CatchupProcessor/run.ps1.Script Structure">
+                <results>
+                  <test-case description="Should exist" name="CatchupProcessor/run.ps1.Script Structure.Should exist" time="0.0059" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have valid PowerShell syntax" name="CatchupProcessor/run.ps1.Script Structure.Should have valid PowerShell syntax" time="0.0064" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should accept Timer parameter" name="CatchupProcessor/run.ps1.Script Structure.Should accept Timer parameter" time="0.0123" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should import DmarcHelpers module" name="CatchupProcessor/run.ps1.Script Structure.Should import DmarcHelpers module" time="0.0126" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="CatchupProcessor/run.ps1.Configuration Validation" executed="True" result="Success" success="True" time="0.0662" asserts="0" description="CatchupProcessor/run.ps1.Configuration Validation">
+                <results>
+                  <test-case description="Should check for MAILBOX_USER_ID" name="CatchupProcessor/run.ps1.Configuration Validation.Should check for MAILBOX_USER_ID" time="0.014" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="CatchupProcessor/run.ps1.Message Processing" executed="True" result="Success" success="True" time="0.0998" asserts="0" description="CatchupProcessor/run.ps1.Message Processing">
+                <results>
+                  <test-case description="Should get Managed Identity token" name="CatchupProcessor/run.ps1.Message Processing.Should get Managed Identity token" time="0.005" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should query for unread messages via paged helper" name="CatchupProcessor/run.ps1.Message Processing.Should query for unread messages via paged helper" time="0.006" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle no unread messages gracefully" name="CatchupProcessor/run.ps1.Message Processing.Should handle no unread messages gracefully" time="0.006" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should process each message" name="CatchupProcessor/run.ps1.Message Processing.Should process each message" time="0.0062" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should track success and failure counts" name="CatchupProcessor/run.ps1.Message Processing.Should track success and failure counts" time="0.0059" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="CatchupProcessor/run.ps1.Error Handling" executed="True" result="Success" success="True" time="0.1332" asserts="0" description="CatchupProcessor/run.ps1.Error Handling">
+                <results>
+                  <test-case description="Should wrap entire processing in try-catch" name="CatchupProcessor/run.ps1.Error Handling.Should wrap entire processing in try-catch" time="0.0062" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle individual message failures gracefully" name="CatchupProcessor/run.ps1.Error Handling.Should handle individual message failures gracefully" time="0.0065" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log individual message failures" name="CatchupProcessor/run.ps1.Error Handling.Should log individual message failures" time="0.0046" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should continue processing after individual failures" name="CatchupProcessor/run.ps1.Error Handling.Should continue processing after individual failures" time="0.0048" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="CatchupProcessor/run.ps1.Timer Handling" executed="True" result="Success" success="True" time="0.1487" asserts="0" description="CatchupProcessor/run.ps1.Timer Handling">
+                <results>
+                  <test-case description="Should check if timer is past due" name="CatchupProcessor/run.ps1.Timer Handling.Should check if timer is past due" time="0.0056" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should warn if timer is past due" name="CatchupProcessor/run.ps1.Timer Handling.Should warn if timer is past due" time="0.0058" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="CatchupProcessor/run.ps1.Logging" executed="True" result="Success" success="True" time="0.1657" asserts="0" description="CatchupProcessor/run.ps1.Logging">
+                <results>
+                  <test-case description="Should log start message" name="CatchupProcessor/run.ps1.Logging.Should log start message" time="0.0051" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log found message count" name="CatchupProcessor/run.ps1.Logging.Should log found message count" time="0.0036" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log completion summary" name="CatchupProcessor/run.ps1.Logging.Should log completion summary" time="0.0042" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+          <test-suite type="TestFixture" name="BackfillProcessor/run.ps1" executed="True" result="Success" success="True" time="0.6034" asserts="0" description="BackfillProcessor/run.ps1">
+            <results>
+              <test-suite type="TestFixture" name="BackfillProcessor/run.ps1.Script Structure" executed="True" result="Success" success="True" time="0.0194" asserts="0" description="BackfillProcessor/run.ps1.Script Structure">
+                <results>
+                  <test-case description="Should exist" name="BackfillProcessor/run.ps1.Script Structure.Should exist" time="0.0037" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have valid PowerShell syntax" name="BackfillProcessor/run.ps1.Script Structure.Should have valid PowerShell syntax" time="0.0057" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should accept Request parameter" name="BackfillProcessor/run.ps1.Script Structure.Should accept Request parameter" time="0.0035" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should import DmarcHelpers module" name="BackfillProcessor/run.ps1.Script Structure.Should import DmarcHelpers module" time="0.0034" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="BackfillProcessor/run.ps1.Configuration Validation" executed="True" result="Success" success="True" time="0.0295" asserts="0" description="BackfillProcessor/run.ps1.Configuration Validation">
+                <results>
+                  <test-case description="Should check for MAILBOX_USER_ID" name="BackfillProcessor/run.ps1.Configuration Validation.Should check for MAILBOX_USER_ID" time="0.0073" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="BackfillProcessor/run.ps1.Query Parameters" executed="True" result="Success" success="True" time="0.0479" asserts="0" description="BackfillProcessor/run.ps1.Query Parameters">
+                <results>
+                  <test-case description="Should parse days parameter with validation" name="BackfillProcessor/run.ps1.Query Parameters.Should parse days parameter with validation" time="0.0049" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should default days to 7" name="BackfillProcessor/run.ps1.Query Parameters.Should default days to 7" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should parse includeRead parameter" name="BackfillProcessor/run.ps1.Query Parameters.Should parse includeRead parameter" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should default includeRead to false" name="BackfillProcessor/run.ps1.Query Parameters.Should default includeRead to false" time="0.0034" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="BackfillProcessor/run.ps1.Message Processing" executed="True" result="Success" success="True" time="0.0753" asserts="0" description="BackfillProcessor/run.ps1.Message Processing">
+                <results>
+                  <test-case description="Should use Get-MailboxMessages with paging" name="BackfillProcessor/run.ps1.Message Processing.Should use Get-MailboxMessages with paging" time="0.0057" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should pass days and includeRead parameters" name="BackfillProcessor/run.ps1.Message Processing.Should pass days and includeRead parameters" time="0.0058" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should process each message" name="BackfillProcessor/run.ps1.Message Processing.Should process each message" time="0.0055" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should track success and failure counts" name="BackfillProcessor/run.ps1.Message Processing.Should track success and failure counts" time="0.0058" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="BackfillProcessor/run.ps1.HTTP Response" executed="True" result="Success" success="True" time="0.1021" asserts="0" description="BackfillProcessor/run.ps1.HTTP Response">
+                <results>
+                  <test-case description="Should return JSON response with processing summary" name="BackfillProcessor/run.ps1.HTTP Response.Should return JSON response with processing summary" time="0.007" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should return 400 for invalid days parameter" name="BackfillProcessor/run.ps1.HTTP Response.Should return 400 for invalid days parameter" time="0.0052" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should return 500 for missing MAILBOX_USER_ID" name="BackfillProcessor/run.ps1.HTTP Response.Should return 500 for missing MAILBOX_USER_ID" time="0.0075" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should return 200 with summary on success" name="BackfillProcessor/run.ps1.HTTP Response.Should return 200 with summary on success" time="0.0036" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="BackfillProcessor/run.ps1.Error Handling" executed="True" result="Success" success="True" time="0.1179" asserts="0" description="BackfillProcessor/run.ps1.Error Handling">
+                <results>
+                  <test-case description="Should wrap processing in try-catch" name="BackfillProcessor/run.ps1.Error Handling.Should wrap processing in try-catch" time="0.0043" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle individual message failures gracefully" name="BackfillProcessor/run.ps1.Error Handling.Should handle individual message failures gracefully" time="0.0039" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should continue processing after individual failures" name="BackfillProcessor/run.ps1.Error Handling.Should continue processing after individual failures" time="0.0034" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="BackfillProcessor/run.ps1.Logging" executed="True" result="Success" success="True" time="0.1528" asserts="0" description="BackfillProcessor/run.ps1.Logging">
+                <results>
+                  <test-case description="Should log backfill start with parameters" name="BackfillProcessor/run.ps1.Logging.Should log backfill start with parameters" time="0.0146" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log found message count" name="BackfillProcessor/run.ps1.Logging.Should log found message count" time="0.007" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should log completion summary" name="BackfillProcessor/run.ps1.Logging.Should log completion summary" time="0.006" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/Grant-MIExchangeRBAC.Tests.ps1" executed="True" result="Success" success="True" time="0.1933" asserts="0" description="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/Grant-MIExchangeRBAC.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1" executed="True" result="Success" success="True" time="0.1637" asserts="0" description="Grant-MIExchangeRBAC.ps1">
+            <results>
+              <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1.Script Structure" executed="True" result="Success" success="True" time="0.0395" asserts="0" description="Grant-MIExchangeRBAC.ps1.Script Structure">
+                <results>
+                  <test-case description="Should exist" name="Grant-MIExchangeRBAC.ps1.Script Structure.Should exist" time="0.0049" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have valid PowerShell syntax" name="Grant-MIExchangeRBAC.ps1.Script Structure.Should have valid PowerShell syntax" time="0.0152" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have CmdletBinding attribute" name="Grant-MIExchangeRBAC.ps1.Script Structure.Should have CmdletBinding attribute" time="0.0045" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have required parameters" name="Grant-MIExchangeRBAC.ps1.Script Structure.Should have required parameters" time="0.0063" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set ErrorActionPreference to Stop" name="Grant-MIExchangeRBAC.ps1.Script Structure.Should set ErrorActionPreference to Stop" time="0.0046" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1.Managed Identity Operations" executed="True" result="Success" success="True" time="0.0605" asserts="0" description="Grant-MIExchangeRBAC.ps1.Managed Identity Operations">
+                <results>
+                  <test-case description="Should retrieve Function App Managed Identity via ARM REST" name="Grant-MIExchangeRBAC.ps1.Managed Identity Operations.Should retrieve Function App Managed Identity via ARM REST" time="0.0069" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should validate MI is enabled" name="Grant-MIExchangeRBAC.ps1.Managed Identity Operations.Should validate MI is enabled" time="0.0057" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should get service principal details via Microsoft Graph" name="Grant-MIExchangeRBAC.ps1.Managed Identity Operations.Should get service principal details via Microsoft Graph" time="0.0048" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1.Microsoft Graph API Roles" executed="True" result="Success" success="True" time="0.0775" asserts="0" description="Grant-MIExchangeRBAC.ps1.Microsoft Graph API Roles">
+                <results>
+                  <test-case description="Should assign Mail.Read and Mail.ReadWrite roles" name="Grant-MIExchangeRBAC.ps1.Microsoft Graph API Roles.Should assign Mail.Read and Mail.ReadWrite roles" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should check for existing role assignments" name="Grant-MIExchangeRBAC.ps1.Microsoft Graph API Roles.Should check for existing role assignments" time="0.0032" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should create new role assignments if needed" name="Grant-MIExchangeRBAC.ps1.Microsoft Graph API Roles.Should create new role assignments if needed" time="0.0031" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should connect to Microsoft Graph if not connected" name="Grant-MIExchangeRBAC.ps1.Microsoft Graph API Roles.Should connect to Microsoft Graph if not connected" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC" executed="True" result="Success" success="True" time="0.1108" asserts="0" description="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC">
+                <results>
+                  <test-case description="Should create Exchange service principal" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC.Should create Exchange service principal" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should check if service principal already exists" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC.Should check if service principal already exists" time="0.0062" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should create Management Scope for mailbox restriction" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC.Should create Management Scope for mailbox restriction" time="0.0048" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should validate mailbox email address format" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC.Should validate mailbox email address format" time="0.0034" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should assign Application RBAC roles" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC.Should assign Application RBAC roles" time="0.0047" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should scope RBAC roles to the specific mailbox" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC.Should scope RBAC roles to the specific mailbox" time="0.0032" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should connect to Exchange Online if not connected" name="Grant-MIExchangeRBAC.ps1.Exchange Online RBAC.Should connect to Exchange Online if not connected" time="0.0039" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1.Security Considerations" executed="True" result="Success" success="True" time="0.1234" asserts="0" description="Grant-MIExchangeRBAC.ps1.Security Considerations">
+                <results>
+                  <test-case description="Should implement least privilege with Management Scope" name="Grant-MIExchangeRBAC.ps1.Security Considerations.Should implement least privilege with Management Scope" time="0.0034" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should provide permission propagation notice" name="Grant-MIExchangeRBAC.ps1.Security Considerations.Should provide permission propagation notice" time="0.0032" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should provide verification command" name="Grant-MIExchangeRBAC.ps1.Security Considerations.Should provide verification command" time="0.0032" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1.Error Handling" executed="True" result="Success" success="True" time="0.1366" asserts="0" description="Grant-MIExchangeRBAC.ps1.Error Handling">
+                <results>
+                  <test-case description="Should handle missing Managed Identity" name="Grant-MIExchangeRBAC.ps1.Error Handling.Should handle missing Managed Identity" time="0.0035" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle invalid email address" name="Grant-MIExchangeRBAC.ps1.Error Handling.Should handle invalid email address" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should check for existing assignments and handle gracefully" name="Grant-MIExchangeRBAC.ps1.Error Handling.Should check for existing assignments and handle gracefully" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Grant-MIExchangeRBAC.ps1.User Experience" executed="True" result="Success" success="True" time="0.161" asserts="0" description="Grant-MIExchangeRBAC.ps1.User Experience">
+                <results>
+                  <test-case description="Should provide clear progress indicators" name="Grant-MIExchangeRBAC.ps1.User Experience.Should provide clear progress indicators" time="0.0164" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should provide summary output" name="Grant-MIExchangeRBAC.ps1.User Experience.Should provide summary output" time="0.0053" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/New-GraphSubscription.Tests.ps1" executed="True" result="Success" success="True" time="0.1696" asserts="0" description="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/New-GraphSubscription.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="New-GraphSubscription.ps1" executed="True" result="Success" success="True" time="0.139" asserts="0" description="New-GraphSubscription.ps1">
+            <results>
+              <test-suite type="TestFixture" name="New-GraphSubscription.ps1.Script Structure" executed="True" result="Success" success="True" time="0.0363" asserts="0" description="New-GraphSubscription.ps1.Script Structure">
+                <results>
+                  <test-case description="Should exist" name="New-GraphSubscription.ps1.Script Structure.Should exist" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have valid PowerShell syntax" name="New-GraphSubscription.ps1.Script Structure.Should have valid PowerShell syntax" time="0.0086" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have CmdletBinding attribute" name="New-GraphSubscription.ps1.Script Structure.Should have CmdletBinding attribute" time="0.0058" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should have required parameters" name="New-GraphSubscription.ps1.Script Structure.Should have required parameters" time="0.0082" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set ErrorActionPreference to Stop" name="New-GraphSubscription.ps1.Script Structure.Should set ErrorActionPreference to Stop" time="0.0056" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="New-GraphSubscription.ps1.Deployment Verification" executed="True" result="Success" success="True" time="0.0485" asserts="0" description="New-GraphSubscription.ps1.Deployment Verification">
+                <results>
+                  <test-case description="Should get default hostname from ARM" name="New-GraphSubscription.ps1.Deployment Verification.Should get default hostname from ARM" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should verify SetupHelper function is deployed" name="New-GraphSubscription.ps1.Deployment Verification.Should verify SetupHelper function is deployed" time="0.0032" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should suggest func publish if function is not deployed" name="New-GraphSubscription.ps1.Deployment Verification.Should suggest func publish if function is not deployed" time="0.0031" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="New-GraphSubscription.ps1.Graph Subscription Creation" executed="True" result="Success" success="True" time="0.0806" asserts="0" description="New-GraphSubscription.ps1.Graph Subscription Creation">
+                <results>
+                  <test-case description="Should retrieve master host key via ARM API" name="New-GraphSubscription.ps1.Graph Subscription Creation.Should retrieve master host key via ARM API" time="0.007" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should invoke SetupHelper function endpoint" name="New-GraphSubscription.ps1.Graph Subscription Creation.Should invoke SetupHelper function endpoint" time="0.0034" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should use hostname from ARM (not hardcoded)" name="New-GraphSubscription.ps1.Graph Subscription Creation.Should use hostname from ARM (not hardcoded)" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should retry for cold start" name="New-GraphSubscription.ps1.Graph Subscription Creation.Should retry for cold start" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should construct correct notification URL" name="New-GraphSubscription.ps1.Graph Subscription Creation.Should construct correct notification URL" time="0.004" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should set expiration to 4200 minutes" name="New-GraphSubscription.ps1.Graph Subscription Creation.Should set expiration to 4200 minutes" time="0.0031" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT use Connect-MgGraph or Graph PowerShell SDK" name="New-GraphSubscription.ps1.Graph Subscription Creation.Should NOT use Connect-MgGraph or Graph PowerShell SDK" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="New-GraphSubscription.ps1.Partner Topic Activation" executed="True" result="Success" success="True" time="0.0932" asserts="0" description="New-GraphSubscription.ps1.Partner Topic Activation">
+                <results>
+                  <test-case description="Should wait for partner topic to appear" name="New-GraphSubscription.ps1.Partner Topic Activation.Should wait for partner topic to appear" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should activate the partner topic" name="New-GraphSubscription.ps1.Partner Topic Activation.Should activate the partner topic" time="0.0031" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should handle timeout" name="New-GraphSubscription.ps1.Partner Topic Activation.Should handle timeout" time="0.003" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="New-GraphSubscription.ps1.Event Subscription Creation" executed="True" result="Success" success="True" time="0.1059" asserts="0" description="New-GraphSubscription.ps1.Event Subscription Creation">
+                <results>
+                  <test-case description="Should create event subscription on partner topic" name="New-GraphSubscription.ps1.Event Subscription Creation.Should create event subscription on partner topic" time="0.0032" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should use AzureFunction endpoint targeting DmarcReportProcessor" name="New-GraphSubscription.ps1.Event Subscription Creation.Should use AzureFunction endpoint targeting DmarcReportProcessor" time="0.0039" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should use CloudEventSchemaV1_0 (required by Graph partner topics)" name="New-GraphSubscription.ps1.Event Subscription Creation.Should use CloudEventSchemaV1_0 (required by Graph partner topics)" time="0.0031" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="New-GraphSubscription.ps1.Subscription ID Management" executed="True" result="Success" success="True" time="0.1231" asserts="0" description="New-GraphSubscription.ps1.Subscription ID Management">
+                <results>
+                  <test-case description="Should save GRAPH_SUBSCRIPTION_ID to app settings via ARM REST" name="New-GraphSubscription.ps1.Subscription ID Management.Should save GRAPH_SUBSCRIPTION_ID to app settings via ARM REST" time="0.0072" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should NOT use Set-AzWebApp (incompatible with Flex Consumption)" name="New-GraphSubscription.ps1.Subscription ID Management.Should NOT use Set-AzWebApp (incompatible with Flex Consumption)" time="0.0033" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should merge with existing app settings" name="New-GraphSubscription.ps1.Subscription ID Management.Should merge with existing app settings" time="0.0041" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="New-GraphSubscription.ps1.User Experience" executed="True" result="Success" success="True" time="0.1361" asserts="0" description="New-GraphSubscription.ps1.User Experience">
+                <results>
+                  <test-case description="Should display step progress" name="New-GraphSubscription.ps1.User Experience.Should display step progress" time="0.0038" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should display completion message" name="New-GraphSubscription.ps1.User Experience.Should display completion message" time="0.0036" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Should not require manual steps or prompts" name="New-GraphSubscription.ps1.User Experience.Should not require manual steps or prompts" time="0.003" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+      <test-suite type="TestFixture" name="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/Versioning.Tests.ps1" executed="True" result="Success" success="True" time="0.0609" asserts="0" description="/home/runner/work/DMARC-Analyzer-Azure/DMARC-Analyzer-Azure/tests/Versioning.Tests.ps1">
+        <results>
+          <test-suite type="TestFixture" name="Versioning and query safety metadata" executed="True" result="Success" success="True" time="0.0383" asserts="0" description="Versioning and query safety metadata">
+            <results>
+              <test-suite type="TestFixture" name="Versioning and query safety metadata.SemVer consistency" executed="True" result="Success" success="True" time="0.0177" asserts="0" description="Versioning and query safety metadata.SemVer consistency">
+                <results>
+                  <test-case description="VERSION should be valid SemVer" name="Versioning and query safety metadata.SemVer consistency.VERSION should be valid SemVer" time="0.003" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="All detection rules should match VERSION metadata" name="Versioning and query safety metadata.SemVer consistency.All detection rules should match VERSION metadata" time="0.0086" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Workbook header should include workbook release metadata" name="Versioning and query safety metadata.SemVer consistency.Workbook header should include workbook release metadata" time="0.0032" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+              <test-suite type="TestFixture" name="Versioning and query safety metadata.KQL safety guardrails" executed="True" result="Success" success="True" time="0.0358" asserts="0" description="Versioning and query safety metadata.KQL safety guardrails">
+                <results>
+                  <test-case description="Workbook should include divide-by-zero guards for key metrics and scoring queries" name="Versioning and query safety metadata.KQL safety guardrails.Workbook should include divide-by-zero guards for key metrics and scoring queries" time="0.0125" asserts="0" success="True" result="Success" executed="True" />
+                  <test-case description="Alert pass-rate logic should use DMARC semantics (SPF OR DKIM pass)" name="Versioning and query safety metadata.KQL safety guardrails.Alert pass-rate logic should use DMARC semantics (SPF OR DKIM pass)" time="0.0029" asserts="0" success="True" result="Success" executed="True" />
+                </results>
+              </test-suite>
+            </results>
+          </test-suite>
+        </results>
+      </test-suite>
+    </results>
+  </test-suite>
+</test-results>

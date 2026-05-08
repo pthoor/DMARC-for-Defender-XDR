@@ -21,17 +21,19 @@ relevantTechniques:
 query: |
   DMARCReports_CL
   | where TimeGenerated > ago(1h)
-  | where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'
+  | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+  | where tolower(PolicyEvaluated_dkim) == 'fail' and tolower(PolicyEvaluated_spf) == 'fail'
   | summarize
-      FailedMessages = sum(MessageCount),
+      FailedMessages = sum(MessageCountSafe),
       Domains = make_set(Domain, 10),
       HeaderFroms = make_set(HeaderFrom, 10)
       by SourceIP
+  | where isnotempty(SourceIP)
   | where FailedMessages >= 50
 entityMappings:
   - entityType: IP
     fieldMappings:
       - identifier: Address
         columnName: SourceIP
-version: 1.0.0
+version: 1.1.0
 kind: Scheduled

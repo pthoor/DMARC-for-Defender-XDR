@@ -21,17 +21,19 @@ relevantTechniques:
 query: |
   let baseline = DMARCReports_CL
   | where TimeGenerated between (ago(14d) .. ago(1d))
+  | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
   | summarize
-      BaselinePass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),
-      BaselineTotal = sum(MessageCount)
+      BaselinePass = sumif(MessageCountSafe, tolower(PolicyEvaluated_dkim) == 'pass' or tolower(PolicyEvaluated_spf) == 'pass'),
+      BaselineTotal = sum(MessageCountSafe)
       by Domain
   | where BaselineTotal >= 100
   | extend BaselinePassRate = round(100.0 * BaselinePass / BaselineTotal, 1);
   let recent = DMARCReports_CL
   | where TimeGenerated > ago(1d)
+  | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
   | summarize
-      RecentPass = sumif(MessageCount, PolicyEvaluated_dkim == 'pass' or PolicyEvaluated_spf == 'pass'),
-      RecentTotal = sum(MessageCount)
+      RecentPass = sumif(MessageCountSafe, tolower(PolicyEvaluated_dkim) == 'pass' or tolower(PolicyEvaluated_spf) == 'pass'),
+      RecentTotal = sum(MessageCountSafe)
       by Domain
   | where RecentTotal >= 10
   | extend RecentPassRate = round(100.0 * RecentPass / RecentTotal, 1);
@@ -46,5 +48,5 @@ entityMappings:
     fieldMappings:
       - identifier: DomainName
         columnName: Domain
-version: 1.0.0
+version: 1.1.0
 kind: Scheduled

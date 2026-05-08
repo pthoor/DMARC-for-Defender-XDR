@@ -39,7 +39,7 @@ resource passRateDropAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
   location: location
   properties: {
     displayName: 'DMARC Pass Rate Drop'
-    description: 'Triggers when the overall DMARC pass rate (both SPF and DKIM passing) drops below ${passRateThreshold}% over the last 24 hours. A sustained drop may indicate a misconfiguration, a new unauthorized sender, or an active spoofing campaign.'
+    description: 'Triggers when the overall DMARC pass rate (at least SPF or DKIM passing) drops below ${passRateThreshold}% over the last 24 hours. A sustained drop may indicate a misconfiguration, a new unauthorized sender, or an active spoofing campaign.'
     severity: 2
     enabled: alertEnabled == 'true'
     evaluationFrequency: 'PT1H'
@@ -52,9 +52,10 @@ resource passRateDropAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
         {
           query: '''
 DMARCReports_CL
+| extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
 | summarize
-    TotalMessages = sum(MessageCount),
-    PassedMessages = sumif(MessageCount, PolicyEvaluated_dkim == "pass" and PolicyEvaluated_spf == "pass")
+    TotalMessages = sum(MessageCountSafe),
+    PassedMessages = sumif(MessageCountSafe, PolicyEvaluated_dkim == "pass" or PolicyEvaluated_spf == "pass")
 | extend PassRate = iff(TotalMessages == 0, 100.0, round(toreal(PassedMessages) / toreal(TotalMessages) * 100, 2))
 | where PassRate < ${passRateThreshold}
 '''
@@ -186,13 +187,16 @@ let baselineStart = ago(31d);
 let baselineEnd = ago(1d);
 let baseline = DMARCReports_CL
     | where TimeGenerated between (baselineStart .. baselineEnd)
-    | summarize DailyVolume = sum(MessageCount) by bin(TimeGenerated, 1d)
+    | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+    | summarize DailyVolume = sum(MessageCountSafe) by bin(TimeGenerated, 1d)
     | summarize AvgDailyVolume = avg(DailyVolume);
 let todayVolume = DMARCReports_CL
     | where TimeGenerated >= ago(1d)
-    | summarize TodayVolume = sum(MessageCount);
+    | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+    | summarize TodayVolume = sum(MessageCountSafe);
 baseline
-| join kind=inner todayVolume on $left.AvgDailyVolume == $left.AvgDailyVolume
+| extend JoinKey = 1
+| join kind=inner (todayVolume | extend JoinKey = 1) on JoinKey
 | where TodayVolume > AvgDailyVolume * 3 and AvgDailyVolume > 0
 '''
           timeAggregation: 'Count'

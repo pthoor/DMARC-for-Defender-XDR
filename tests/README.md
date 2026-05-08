@@ -80,6 +80,11 @@ All tests validate:
 - ✅ Logging and user experience
 - ✅ Integration patterns (Graph API, Exchange RBAC)
 
+### Versioning & KQL Guardrails (`tests/Versioning.Tests.ps1`)
+- SemVer metadata consistency (`VERSION`, detection `version:` fields, workbook release marker)
+- Static guardrails for divide-by-zero protections in workbook KPI/compliance queries
+- Alert logic validation for DMARC pass-rate semantics (SPF **or** DKIM pass)
+
 ## Requirements
 
 - PowerShell 7.4+

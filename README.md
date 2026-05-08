@@ -60,6 +60,17 @@ RUF reports provide per-message failure details:
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture, data flow, and security model.
 
+## Versioning and Release Metadata
+
+This project uses **Semantic Versioning** (`MAJOR.MINOR.PATCH`) to support safe upgrades across multiple tenants.
+
+- Source-of-truth version: [`VERSION`](VERSION)
+- Release history: [`CHANGELOG.md`](CHANGELOG.md)
+- Workbook release marker: `workbook/dmarc-workbook.json` header
+- Detection rule metadata: `detections/*.yaml` (`version:` field)
+
+For the current open-source readiness audit, including KQL correctness findings and roadmap guidance, see [`docs/OPEN_SOURCE_READINESS_AUDIT.md`](docs/OPEN_SOURCE_READINESS_AUDIT.md).
+
 ## Prerequisites
 
 - Azure subscription with permissions to create resources

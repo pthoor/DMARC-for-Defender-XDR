@@ -21,19 +21,22 @@ relevantTechniques:
 query: |
   DMARCReports_CL
   | where TimeGenerated > ago(6h)
+  | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
   | where isnotempty(PolicyEvaluated_reason_type)
-  | where PolicyEvaluated_reason_type !has_any ('forwarded', 'mailing_list', 'trusted_forwarder', 'local_policy', 'sampled_out')
+  | where tolower(PolicyEvaluated_reason_type) !has_any ('forwarded', 'mailing_list', 'trusted_forwarder', 'local_policy', 'sampled_out')
   | summarize
-      OverriddenMessages = sum(MessageCount),
+      OverriddenMessages = sum(MessageCountSafe),
       Domains = make_set(Domain, 10),
-      SourceIPs = make_set(SourceIP, 10),
+      SampleIP = anyif(SourceIP, isnotempty(SourceIP)),
+      SourceIPs = make_set_if(SourceIP, isnotempty(SourceIP), 10),
       ReasonComments = make_set(PolicyEvaluated_reason_comment, 5)
       by PolicyEvaluated_reason_type
   | where OverriddenMessages >= 5
+  | where isnotempty(SampleIP)
 entityMappings:
   - entityType: IP
     fieldMappings:
       - identifier: Address
-        columnName: SourceIPs
-version: 1.0.0
+        columnName: SampleIP
+version: 1.1.0
 kind: Scheduled
