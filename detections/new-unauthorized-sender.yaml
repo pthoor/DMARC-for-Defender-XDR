@@ -20,13 +20,16 @@ relevantTechniques:
 query: |
   let known = DMARCReports_CL
   | where TimeGenerated between (ago(14d) .. ago(6h))
+  | where isnotempty(SourceIP)
   | distinct SourceIP;
   DMARCReports_CL
   | where TimeGenerated > ago(6h)
-  | where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'
+  | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+  | where tolower(PolicyEvaluated_dkim) == 'fail' and tolower(PolicyEvaluated_spf) == 'fail'
+  | where isnotempty(SourceIP)
   | where SourceIP !in (known)
   | summarize
-      FailedMessages = sum(MessageCount),
+      FailedMessages = sum(MessageCountSafe),
       Domains = make_set(Domain, 10),
       HeaderFroms = make_set(HeaderFrom, 10),
       SpfDomains = make_set(SpfDomain, 5)
@@ -37,5 +40,5 @@ entityMappings:
     fieldMappings:
       - identifier: Address
         columnName: SourceIP
-version: 1.0.0
+version: 1.1.0
 kind: Scheduled
