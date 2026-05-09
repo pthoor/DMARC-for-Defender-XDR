@@ -4,8 +4,8 @@
   "metadata": {
     "_generator": {
       "name": "bicep",
-      "version": "0.40.2.10011",
-      "templateHash": "17153985319191938213"
+      "version": "0.42.1.51946",
+      "templateHash": "16467549743811782279"
     }
   },
   "parameters": {
@@ -716,8 +716,8 @@
           "metadata": {
             "_generator": {
               "name": "bicep",
-              "version": "0.40.2.10011",
-              "templateHash": "17927806738039843752"
+              "version": "0.42.1.51946",
+              "templateHash": "10116935502565556897"
             }
           },
           "parameters": {
@@ -769,7 +769,7 @@
               "location": "[parameters('location')]",
               "properties": {
                 "displayName": "DMARC Pass Rate Drop",
-                "description": "[format('Triggers when the overall DMARC pass rate (both SPF and DKIM passing) drops below {0}% over the last 24 hours. A sustained drop may indicate a misconfiguration, a new unauthorized sender, or an active spoofing campaign.', parameters('passRateThreshold'))]",
+                "description": "[format('Triggers when the overall DMARC pass rate (at least SPF or DKIM passing) drops below {0}% over the last 24 hours. A sustained drop may indicate a misconfiguration, a new unauthorized sender, or an active spoofing campaign.', parameters('passRateThreshold'))]",
                 "severity": 2,
                 "enabled": "[equals(variables('alertEnabled'), 'true')]",
                 "evaluationFrequency": "PT1H",
@@ -780,7 +780,7 @@
                 "criteria": {
                   "allOf": [
                     {
-                      "query": "DMARCReports_CL\r\n| summarize\r\n    TotalMessages = sum(MessageCount),\r\n    PassedMessages = sumif(MessageCount, PolicyEvaluated_dkim == \"pass\" and PolicyEvaluated_spf == \"pass\")\r\n| extend PassRate = iff(TotalMessages == 0, 100.0, round(toreal(PassedMessages) / toreal(TotalMessages) * 100, 2))\r\n| where PassRate < ${passRateThreshold}\r\n",
+                      "query": "DMARCReports_CL\n| extend MessageCountSafe = tolong(coalesce(MessageCount, 0))\n| summarize\n    TotalMessages = sum(MessageCountSafe),\n    PassedMessages = sumif(MessageCountSafe, PolicyEvaluated_dkim == \"pass\" or PolicyEvaluated_spf == \"pass\")\n| extend PassRate = iff(TotalMessages == 0, 100.0, round(toreal(PassedMessages) / toreal(TotalMessages) * 100, 2))\n| where PassRate < ${passRateThreshold}\n",
                       "timeAggregation": "Count",
                       "operator": "GreaterThan",
                       "threshold": 0,
@@ -815,7 +815,7 @@
                 "criteria": {
                   "allOf": [
                     {
-                      "query": "DMARCReports_CL\r\n| summarize ReportCount = count()\r\n| where ReportCount == 0\r\n",
+                      "query": "DMARCReports_CL\n| summarize ReportCount = count()\n| where ReportCount == 0\n",
                       "timeAggregation": "Count",
                       "operator": "GreaterThan",
                       "threshold": 0,
@@ -850,7 +850,7 @@
                 "criteria": {
                   "allOf": [
                     {
-                      "query": "let lookbackStart = ago(31d);\r\nlet lookbackEnd = ago(1d);\r\nlet knownIPs = DMARCReports_CL\r\n    | where TimeGenerated between (lookbackStart .. lookbackEnd)\r\n    | distinct SourceIP;\r\nDMARCReports_CL\r\n| where TimeGenerated >= ago(1d)\r\n| where PolicyEvaluated_dkim != \"pass\" and PolicyEvaluated_spf != \"pass\"\r\n| where SourceIP !in (knownIPs)\r\n| summarize FailedMessages = sum(MessageCount) by SourceIP, Domain\r\n| where FailedMessages >= 10\r\n",
+                      "query": "let lookbackStart = ago(31d);\nlet lookbackEnd = ago(1d);\nlet knownIPs = DMARCReports_CL\n    | where TimeGenerated between (lookbackStart .. lookbackEnd)\n    | distinct SourceIP;\nDMARCReports_CL\n| where TimeGenerated >= ago(1d)\n| where PolicyEvaluated_dkim != \"pass\" and PolicyEvaluated_spf != \"pass\"\n| where SourceIP !in (knownIPs)\n| summarize FailedMessages = sum(MessageCount) by SourceIP, Domain\n| where FailedMessages >= 10\n",
                       "timeAggregation": "Count",
                       "operator": "GreaterThan",
                       "threshold": 0,
@@ -885,7 +885,7 @@
                 "criteria": {
                   "allOf": [
                     {
-                      "query": "let baselineStart = ago(31d);\r\nlet baselineEnd = ago(1d);\r\nlet baseline = DMARCReports_CL\r\n    | where TimeGenerated between (baselineStart .. baselineEnd)\r\n    | summarize DailyVolume = sum(MessageCount) by bin(TimeGenerated, 1d)\r\n    | summarize AvgDailyVolume = avg(DailyVolume);\r\nlet todayVolume = DMARCReports_CL\r\n    | where TimeGenerated >= ago(1d)\r\n    | summarize TodayVolume = sum(MessageCount);\r\nbaseline\r\n| join kind=inner todayVolume on $left.AvgDailyVolume == $left.AvgDailyVolume\r\n| where TodayVolume > AvgDailyVolume * 3 and AvgDailyVolume > 0\r\n",
+                      "query": "let baselineStart = ago(31d);\nlet baselineEnd = ago(1d);\nlet baseline = DMARCReports_CL\n    | where TimeGenerated between (baselineStart .. baselineEnd)\n    | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))\n    | summarize DailyVolume = sum(MessageCountSafe) by bin(TimeGenerated, 1d)\n    | summarize AvgDailyVolume = avg(DailyVolume);\nlet todayVolume = DMARCReports_CL\n    | where TimeGenerated >= ago(1d)\n    | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))\n    | summarize TodayVolume = sum(MessageCountSafe);\nbaseline\n| extend JoinKey = 1\n| join kind=inner (todayVolume | extend JoinKey = 1) on JoinKey\n| where TodayVolume > AvgDailyVolume * 3 and AvgDailyVolume > 0\n",
                       "timeAggregation": "Count",
                       "operator": "GreaterThan",
                       "threshold": 0,
