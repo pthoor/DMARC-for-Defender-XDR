@@ -26,7 +26,12 @@ query: |
   DMARCReports_CL
   | where TimeGenerated > ago(6h)
   | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
-  | where DmarcPass == false
+  | extend DmarcPassEffective = coalesce(
+      tobool(column_ifexists('DmarcPass', bool(null))),
+      tolower(tostring(column_ifexists('PolicyEvaluated_dkim', ''))) == 'pass'
+      or tolower(tostring(column_ifexists('PolicyEvaluated_spf', ''))) == 'pass'
+    )
+  | where DmarcPassEffective == false
   | where isnotempty(SourceIP)
   | where SourceIP !in (known)
   | summarize

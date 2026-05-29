@@ -61,9 +61,12 @@ function Write-WarnCheck {
 }
 
 function Get-AzJson {
-    param([string]$Command)
+    param(
+        [Parameter(Mandatory)]
+        [string[]]$Arguments
+    )
 
-    $output = Invoke-Expression $Command
+    $output = az @Arguments
     if ([string]::IsNullOrWhiteSpace($output)) {
         return $null
     }
@@ -75,7 +78,7 @@ if ($SubscriptionId) {
     az account set --subscription $SubscriptionId | Out-Null
 }
 
-$functionApp = Get-AzJson -Command "az functionapp show -g '$ResourceGroupName' -n '$FunctionAppName' -o json"
+$functionApp = Get-AzJson -Arguments @('functionapp', 'show', '-g', $ResourceGroupName, '-n', $FunctionAppName, '-o', 'json')
 Write-Check -Name 'Function App exists' -Passed ($null -ne $functionApp) -Detail $FunctionAppName
 if ($null -eq $functionApp) {
     throw 'Stopping validation because Function App was not found.'
@@ -84,7 +87,7 @@ if ($null -eq $functionApp) {
 $principalId = $functionApp.identity.principalId
 Write-Check -Name 'Managed identity exists' -Passed (-not [string]::IsNullOrWhiteSpace($principalId)) -Detail $principalId
 
-$appSettingsArray = Get-AzJson -Command "az functionapp config appsettings list -g '$ResourceGroupName' -n '$FunctionAppName' -o json"
+$appSettingsArray = Get-AzJson -Arguments @('functionapp', 'config', 'appsettings', 'list', '-g', $ResourceGroupName, '-n', $FunctionAppName, '-o', 'json')
 $appSettings = @{}
 foreach ($entry in $appSettingsArray) {
     $appSettings[$entry.name] = [string]$entry.value
@@ -128,7 +131,7 @@ if ([string]::IsNullOrWhiteSpace($subscriptionGraphId)) {
 }
 else {
     try {
-        $graphSubscription = Get-AzJson -Command "az rest --method GET --url 'https://graph.microsoft.com/v1.0/subscriptions/$subscriptionGraphId' -o json"
+        $graphSubscription = Get-AzJson -Arguments @('rest', '--method', 'GET', '--url', "https://graph.microsoft.com/v1.0/subscriptions/$subscriptionGraphId", '-o', 'json')
         $expiry = [datetime]$graphSubscription.expirationDateTime
         $daysLeft = [int][Math]::Floor(($expiry.ToUniversalTime() - (Get-Date).ToUniversalTime()).TotalDays)
         Write-Check -Name 'Graph subscription alive' -Passed ($expiry -gt (Get-Date).ToUniversalTime()) -Detail "Expires $($expiry.ToUniversalTime().ToString('u')) ($daysLeft days)"

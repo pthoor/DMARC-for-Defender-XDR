@@ -708,9 +708,9 @@ function ConvertFrom-DmarcXml {
             DkimAuthResults                = $dkimJson
             SpfAuthResults                 = $spfJson
             RecordIndex                    = $recordIdx
-            Aligned_dkim                   = ($row.policy_evaluated.dkim -eq 'pass')
-            Aligned_spf                    = ($row.policy_evaluated.spf  -eq 'pass')
-            DmarcPass                      = ($row.policy_evaluated.dkim -eq 'pass' -or $row.policy_evaluated.spf -eq 'pass')
+            Aligned_dkim                   = ($row.policy_evaluated.dkim -ieq 'pass')
+            Aligned_spf                    = ($row.policy_evaluated.spf  -ieq 'pass')
+            DmarcPass                      = ($row.policy_evaluated.dkim -ieq 'pass' -or $row.policy_evaluated.spf -ieq 'pass')
         }
 
         # Deterministic hash for cross-run deduplication (SourceMessageId|ReportId|RecordIndex|SourceIP|HeaderFrom)

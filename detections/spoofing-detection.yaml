@@ -23,7 +23,12 @@ query: |
   DMARCReports_CL
   | where TimeGenerated > ago(1h)
   | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
-  | where DmarcPass == false
+  | extend DmarcPassEffective = coalesce(
+      tobool(column_ifexists('DmarcPass', bool(null))),
+      tolower(tostring(column_ifexists('PolicyEvaluated_dkim', ''))) == 'pass'
+      or tolower(tostring(column_ifexists('PolicyEvaluated_spf', ''))) == 'pass'
+    )
+  | where DmarcPassEffective == false
   | summarize
       FailedMessages = sum(MessageCountSafe),
       Domains = make_set(Domain, 10),

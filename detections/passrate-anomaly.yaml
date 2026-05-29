@@ -23,8 +23,13 @@ query: |
   let baseline = DMARCReports_CL
   | where TimeGenerated between (ago(14d) .. ago(1d))
   | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+  | extend DmarcPassEffective = coalesce(
+      tobool(column_ifexists('DmarcPass', bool(null))),
+      tolower(tostring(column_ifexists('PolicyEvaluated_dkim', ''))) == 'pass'
+      or tolower(tostring(column_ifexists('PolicyEvaluated_spf', ''))) == 'pass'
+    )
   | summarize
-      BaselinePass = sumif(MessageCountSafe, DmarcPass == true),
+      BaselinePass = sumif(MessageCountSafe, DmarcPassEffective == true),
       BaselineTotal = sum(MessageCountSafe)
       by Domain
   | where BaselineTotal >= 100
@@ -32,8 +37,13 @@ query: |
   let recent = DMARCReports_CL
   | where TimeGenerated > ago(1d)
   | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+  | extend DmarcPassEffective = coalesce(
+      tobool(column_ifexists('DmarcPass', bool(null))),
+      tolower(tostring(column_ifexists('PolicyEvaluated_dkim', ''))) == 'pass'
+      or tolower(tostring(column_ifexists('PolicyEvaluated_spf', ''))) == 'pass'
+    )
   | summarize
-      RecentPass = sumif(MessageCountSafe, DmarcPass == true),
+      RecentPass = sumif(MessageCountSafe, DmarcPassEffective == true),
       RecentTotal = sum(MessageCountSafe),
       SampleHeaderFrom = anyif(HeaderFrom, isnotempty(HeaderFrom))
       by Domain

@@ -94,7 +94,7 @@ The `DMARCReports_CL` table uses a flat schema — one row per `<record>` elemen
 | ReportId | string | `report_metadata/report_id` |
 | SourceMessageId | string | Graph message ID for ingestion correlation |
 | IngestionRunId | string | Processing run identifier for dedupe analysis |
-| DuplicateTelemetryKey | string | Stable report key (`ReportOrgName|ReportId|Domain`) used for duplicate tracking |
+| DuplicateTelemetryKey | string | Stable report key (`ReportOrgName|ReportId|Domain|ReportDateRangeBegin|ReportDateRangeEnd`) used for duplicate tracking |
 | ReportDateRangeBegin | datetime | `report_metadata/date_range/begin` (epoch→ISO) |
 | ReportDateRangeEnd | datetime | `report_metadata/date_range/end` (epoch→ISO) |
 | Domain | string | `policy_published/domain` |

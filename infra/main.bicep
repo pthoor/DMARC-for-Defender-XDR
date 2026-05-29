@@ -499,7 +499,7 @@ resource functionAppAuthSettings 'Microsoft.Web/sites/config@2024-04-01' = if (!
         enabled: true
         registration: {
           clientId: adminEntraAppClientId
-          openIdIssuer: 'https://sts.windows.net/${subscription().tenantId}/v2.0'
+          openIdIssuer: '${environment().authentication.loginEndpoint}${subscription().tenantId}/v2.0'
         }
         validation: {
           allowedAudiences: [
