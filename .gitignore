@@ -23,6 +23,15 @@ Thumbs.db
 
 # Logs
 *.log
+testResults.xml
 
 # Claude
 .claude
+CLAUDE.md
+
+# Local bicepparam overrides (hardcoded values for testing, never commit)
+*.local.bicepparam
+
+# Internal-only working docs (not published)
+docs/IMPLEMENTATION_PHASES.md
+docs/P3_MICROSOFT_GRAPH_PARITY_GUIDANCE.md

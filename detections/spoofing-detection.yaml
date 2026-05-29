@@ -18,20 +18,38 @@ tactics:
   - InitialAccess
 relevantTechniques:
   - T1566
+  - T1001
 query: |
   DMARCReports_CL
   | where TimeGenerated > ago(1h)
-  | where PolicyEvaluated_dkim == 'fail' and PolicyEvaluated_spf == 'fail'
+  | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+  | extend DmarcPassEffective = coalesce(
+      tobool(column_ifexists('DmarcPass', bool(null))),
+      tolower(tostring(column_ifexists('PolicyEvaluated_dkim', ''))) == 'pass'
+      or tolower(tostring(column_ifexists('PolicyEvaluated_spf', ''))) == 'pass'
+    )
+  | where DmarcPassEffective == false
   | summarize
-      FailedMessages = sum(MessageCount),
+      FailedMessages = sum(MessageCountSafe),
       Domains = make_set(Domain, 10),
-      HeaderFroms = make_set(HeaderFrom, 10)
+      HeaderFroms = make_set(HeaderFrom, 10),
+      SampleDomain = anyif(Domain, isnotempty(Domain)),
+      SampleHeaderFrom = anyif(HeaderFrom, isnotempty(HeaderFrom))
       by SourceIP
+  | where isnotempty(SourceIP)
   | where FailedMessages >= 50
 entityMappings:
   - entityType: IP
     fieldMappings:
       - identifier: Address
         columnName: SourceIP
-version: 1.0.0
+  - entityType: DNS
+    fieldMappings:
+      - identifier: DomainName
+        columnName: SampleDomain
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: SampleHeaderFrom
+version: 1.1.0
 kind: Scheduled

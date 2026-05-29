@@ -9,6 +9,41 @@ Import-Module "$PSScriptRoot/../modules/DmarcHelpers.psm1" -Force
 
 Write-Information "Event Grid trigger fired. Event type: $($eventGridEvent.eventType)"
 
+function Get-EventGridMessageId {
+    param(
+        [Parameter(Mandatory = $true)]
+        $EventGridEvent,
+
+        $ResourceData
+    )
+
+    $candidates = @()
+
+    if ($ResourceData -and $ResourceData.id) {
+        $candidates += [string]$ResourceData.id
+    }
+
+    if ($EventGridEvent.data -and $EventGridEvent.data.id) {
+        $candidates += [string]$EventGridEvent.data.id
+    }
+
+    if ($EventGridEvent.subject -and $EventGridEvent.subject -match '/Messages/([^/?]+)$') {
+        $candidates += [string]$Matches[1]
+    }
+
+    if ($EventGridEvent.data -and $EventGridEvent.data.resource -and $EventGridEvent.data.resource -match '/messages/([^/?]+)$') {
+        $candidates += [string]$Matches[1]
+    }
+
+    foreach ($candidate in $candidates) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+            return [System.Uri]::UnescapeDataString($candidate)
+        }
+    }
+
+    return $null
+}
+
 try {
     # Extract resource data from the change notification
     # Event Grid payload from Graph has the resource data in the event body
@@ -37,8 +72,8 @@ try {
         }
     }
 
-    # Extract message ID from the validated notification
-    $messageId = $resourceData.id
+    # Extract message ID from the validated notification using fallback paths.
+    $messageId = Get-EventGridMessageId -EventGridEvent $eventGridEvent -ResourceData $resourceData
     if (-not $messageId) {
         Write-Error "Could not extract message ID from Event Grid event."
         # Log only non-sensitive identifiers from the Event Grid event.

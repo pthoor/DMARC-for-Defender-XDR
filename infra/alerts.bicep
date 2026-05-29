@@ -21,12 +21,46 @@ param actionGroupId string = ''
 @maxValue(100)
 param passRateThreshold int = 90
 
+@description('Duplicate report-key ratio percentage threshold. Low-severity alert fires when duplicate ratio meets or exceeds this value in the last 24 hours.')
+@minValue(1)
+@maxValue(100)
+param duplicateRatioThreshold int = 5
+
 @description('Whether the alert rules are enabled.')
 param enabled bool = true
 
 // ── Variables ──
 
 var alertEnabled = enabled ? 'true' : 'false'
+
+var duplicateRatioQuery = replace('''
+DMARCReports_CL
+| where TimeGenerated >= ago(1d)
+| extend
+    DuplicateKey = tostring(column_ifexists("DuplicateTelemetryKey", "")),
+    SourceMessageIdSafe = tostring(column_ifexists("SourceMessageId", "")),
+    IngestionRunIdSafe = tostring(column_ifexists("IngestionRunId", ""))
+| where isnotempty(DuplicateKey)
+| extend HasRunMetadata = isnotempty(SourceMessageIdSafe) and isnotempty(IngestionRunIdSafe)
+| as DuplicateData;
+let coverage = DuplicateData
+| summarize
+  ReportKeysObserved = dcount(DuplicateKey),
+  KeysWithRunMetadata = dcountif(DuplicateKey, HasRunMetadata)
+| extend DuplicateMetadataCoverage = iff(ReportKeysObserved > 0, round(100.0 * KeysWithRunMetadata / ReportKeysObserved, 2), 0.0);
+let duplicates = DuplicateData
+| where HasRunMetadata
+| summarize DistinctRuns = dcount(strcat(SourceMessageIdSafe, "|", IngestionRunIdSafe)) by DuplicateKey
+| summarize
+  TotalKeys = count(),
+  DuplicateKeys = countif(DistinctRuns > 1)
+| extend DuplicateRatio = iff(TotalKeys > 0, round(100.0 * DuplicateKeys / TotalKeys, 2), 0.0);
+coverage
+| extend JoinKey = 1
+| join kind=inner (duplicates | extend JoinKey = 1) on JoinKey
+| project-away JoinKey, JoinKey1
+| where KeysWithRunMetadata >= 10 and DuplicateMetadataCoverage >= 80 and DuplicateRatio >= DUPLICATE_RATIO_THRESHOLD
+''', 'DUPLICATE_RATIO_THRESHOLD', string(duplicateRatioThreshold))
 
 var actionGroups = empty(actionGroupId) ? [] : [
   actionGroupId
@@ -39,7 +73,7 @@ resource passRateDropAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
   location: location
   properties: {
     displayName: 'DMARC Pass Rate Drop'
-    description: 'Triggers when the overall DMARC pass rate (both SPF and DKIM passing) drops below ${passRateThreshold}% over the last 24 hours. A sustained drop may indicate a misconfiguration, a new unauthorized sender, or an active spoofing campaign.'
+    description: 'Triggers when the overall DMARC pass rate (at least SPF or DKIM passing) drops below ${passRateThreshold}% over the last 24 hours. A sustained drop may indicate a misconfiguration, a new unauthorized sender, or an active spoofing campaign.'
     severity: 2
     enabled: alertEnabled == 'true'
     evaluationFrequency: 'PT1H'
@@ -52,9 +86,10 @@ resource passRateDropAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
         {
           query: '''
 DMARCReports_CL
+| extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
 | summarize
-    TotalMessages = sum(MessageCount),
-    PassedMessages = sumif(MessageCount, PolicyEvaluated_dkim == "pass" and PolicyEvaluated_spf == "pass")
+    TotalMessages = sum(MessageCountSafe),
+    PassedMessages = sumif(MessageCountSafe, PolicyEvaluated_dkim =~ "pass" or PolicyEvaluated_spf =~ "pass")
 | extend PassRate = iff(TotalMessages == 0, 100.0, round(toreal(PassedMessages) / toreal(TotalMessages) * 100, 2))
 | where PassRate < ${passRateThreshold}
 '''
@@ -141,7 +176,7 @@ let knownIPs = DMARCReports_CL
     | distinct SourceIP;
 DMARCReports_CL
 | where TimeGenerated >= ago(1d)
-| where PolicyEvaluated_dkim != "pass" and PolicyEvaluated_spf != "pass"
+| where PolicyEvaluated_dkim !~ "pass" and PolicyEvaluated_spf !~ "pass"
 | where SourceIP !in (knownIPs)
 | summarize FailedMessages = sum(MessageCount) by SourceIP, Domain
 | where FailedMessages >= 10
@@ -186,13 +221,16 @@ let baselineStart = ago(31d);
 let baselineEnd = ago(1d);
 let baseline = DMARCReports_CL
     | where TimeGenerated between (baselineStart .. baselineEnd)
-    | summarize DailyVolume = sum(MessageCount) by bin(TimeGenerated, 1d)
+    | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+    | summarize DailyVolume = sum(MessageCountSafe) by bin(TimeGenerated, 1d)
     | summarize AvgDailyVolume = avg(DailyVolume);
 let todayVolume = DMARCReports_CL
     | where TimeGenerated >= ago(1d)
-    | summarize TodayVolume = sum(MessageCount);
+    | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+    | summarize TodayVolume = sum(MessageCountSafe);
 baseline
-| join kind=inner todayVolume on $left.AvgDailyVolume == $left.AvgDailyVolume
+| extend JoinKey = 1
+| join kind=inner (todayVolume | extend JoinKey = 1) on JoinKey
 | where TodayVolume > AvgDailyVolume * 3 and AvgDailyVolume > 0
 '''
           timeAggregation: 'Count'
@@ -211,3 +249,92 @@ baseline
     autoMitigate: true
   }
 }
+
+// ── Alert 5: Stale Reporters ──
+
+resource staleReportersAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
+  name: 'dmarc-stale-reporters'
+  location: location
+  properties: {
+    displayName: 'DMARC Stale Reporters'
+    description: 'Triggers when previously active reporters (last 30 to 3 days) stop sending reports for 72+ hours. This detects partial ingestion outages that can be missed by global no-data alerts.'
+    severity: 3
+    enabled: alertEnabled == 'true'
+    evaluationFrequency: 'PT12H'
+    windowSize: 'P3D'
+    scopes: [
+      workspaceId
+    ]
+    criteria: {
+      allOf: [
+        {
+          query: '''
+let historical = DMARCReports_CL
+| where TimeGenerated between (ago(30d) .. ago(3d))
+| where isnotempty(ReportOrgName)
+| extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
+| summarize HistoricalMessages = sum(MessageCountSafe) by ReportOrgName;
+let recent = DMARCReports_CL
+| where TimeGenerated > ago(3d)
+| where isnotempty(ReportOrgName)
+| distinct ReportOrgName;
+historical
+| where HistoricalMessages >= 50
+| where ReportOrgName !in (recent)
+| summarize StaleReporterCount = count()
+| where StaleReporterCount > 0
+'''
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: actionGroups
+    }
+    autoMitigate: true
+  }
+}
+
+// ── Alert 6: Duplicate Report-Key Ratio ──
+
+resource duplicateRatioAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
+  name: 'dmarc-duplicate-report-key-ratio'
+  location: location
+  properties: {
+    displayName: 'DMARC Duplicate Report-Key Ratio'
+    description: 'Low-severity signal that duplicate report-key ratio is elevated. Uses DuplicateTelemetryKey with SourceMessageId and IngestionRunId to highlight probable replay or reprocessing events.'
+    severity: 4
+    enabled: alertEnabled == 'true'
+    evaluationFrequency: 'PT6H'
+    windowSize: 'P1D'
+    scopes: [
+      workspaceId
+    ]
+    criteria: {
+      allOf: [
+        {
+          query: duplicateRatioQuery
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+          failingPeriods: {
+            numberOfEvaluationPeriods: 1
+            minFailingPeriodsToAlert: 1
+          }
+        }
+      ]
+    }
+    actions: {
+      actionGroups: actionGroups
+    }
+    autoMitigate: true
+  }
+}
+
+

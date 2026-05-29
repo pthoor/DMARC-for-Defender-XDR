@@ -62,7 +62,9 @@ Describe 'DmarcReportProcessor/run.ps1' {
     Context 'Event Processing' {
         It 'Should extract message ID from event' {
             $content = Get-Content $scriptPath -Raw
-            $content | Should -Match '\$messageId.*resourceData\.id'
+            $content | Should -Match 'Get-EventGridMessageId'
+            $content | Should -Match 'ResourceData\.id'
+            $content | Should -Match 'eventGridEvent\.subject'
         }
 
         It 'Should handle missing message ID' {

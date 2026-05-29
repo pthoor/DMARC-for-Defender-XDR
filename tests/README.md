@@ -80,6 +80,23 @@ All tests validate:
 - ✅ Logging and user experience
 - ✅ Integration patterns (Graph API, Exchange RBAC)
 
+### Versioning & KQL Guardrails (`tests/Versioning.Tests.ps1`)
+- SemVer metadata consistency (`VERSION`, detection `version:` fields, workbook release marker)
+- Static guardrails for divide-by-zero protections in workbook KPI/compliance queries
+- Alert logic validation for DMARC pass-rate semantics (SPF **or** DKIM pass)
+
+### Golden Dataset Regression (`tests/GoldenDataset.Tests.ps1`)
+- Uses deterministic fixture input in `tests/fixtures/dmarc-golden-input.jsonl`
+- Verifies expected outputs in `tests/fixtures/dmarc-golden-expected.json`
+- Covers edge cases including null/zero `MessageCount`, mixed-case auth values, missing `SourceIP`, and multiple domain/reporter/time bins
+- Asserts exact KPI, daily, and per-domain compliance results to detect formula drift
+
+### Query Parity Checks (`tests/QueryParity.Tests.ps1`)
+- Asserts key workbook KQL fragments for denominator guards and DMARC pass semantics
+- Validates compliance-score weighting and denominator protection logic
+- Verifies anomaly baseline windows and thresholds (`ZScore`, `VolumeMultiple`)
+- Confirms alert query thresholds and baseline calculations remain aligned
+
 ## Requirements
 
 - PowerShell 7.4+

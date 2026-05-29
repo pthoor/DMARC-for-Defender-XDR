@@ -1,0 +1,60 @@
+{
+  "kpi": {
+    "TotalMessages": 330,
+    "Pass": 220,
+    "Fail": 110,
+    "PassRate": 66.7,
+    "DomainsMonitored": 3,
+    "UniqueIPs": 7,
+    "UniqueReporters": 3,
+    "EnforcedDomains": 2,
+    "TotalDomains": 3,
+    "EnforcementPct": 66.7
+  },
+  "daily": [
+    {
+      "Date": "2026-01-01",
+      "Messages": 240,
+      "Pass": 160,
+      "Fail": 80,
+      "PassRate": 66.7
+    },
+    {
+      "Date": "2026-01-02",
+      "Messages": 70,
+      "Pass": 40,
+      "Fail": 30,
+      "PassRate": 57.1
+    },
+    {
+      "Date": "2026-01-03",
+      "Messages": 20,
+      "Pass": 20,
+      "Fail": 0,
+      "PassRate": 100.0
+    }
+  ],
+  "domainCompliance": [
+    {
+      "Domain": "alpha.example",
+      "Messages": 175,
+      "PassRate": 85.7,
+      "ComplianceScore": 62,
+      "RiskLevel": "High"
+    },
+    {
+      "Domain": "beta.example",
+      "Messages": 120,
+      "PassRate": 33.3,
+      "ComplianceScore": 32,
+      "RiskLevel": "Critical"
+    },
+    {
+      "Domain": "gamma.example",
+      "Messages": 30,
+      "PassRate": 100.0,
+      "ComplianceScore": 84,
+      "RiskLevel": "Moderate"
+    }
+  ]
+}
