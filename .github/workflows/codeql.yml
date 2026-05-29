@@ -27,12 +27,37 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Detect CodeQL default setup
+        id: default_setup
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const result = await github.request('GET /repos/{owner}/{repo}/code-scanning/default-setup', {
+                owner: context.repo.owner,
+                repo: context.repo.repo
+              });
+              const enabled = result?.data?.state === 'configured';
+              core.info(`CodeQL default setup state: ${result?.data?.state ?? 'unknown'}`);
+              core.setOutput('enabled', enabled ? 'true' : 'false');
+            } catch (error) {
+              core.info(`Could not read default setup state (${error.status ?? 'n/a'}). Assuming not configured.`);
+              core.setOutput('enabled', 'false');
+            }
+
       - name: Initialize CodeQL
+        if: steps.default_setup.outputs.enabled != 'true'
         uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
 
       - name: Perform CodeQL analysis
+        if: steps.default_setup.outputs.enabled != 'true'
         uses: github/codeql-action/analyze@v3
         with:
           category: /language:${{ matrix.language }}
+
+      - name: Skip duplicate CodeQL upload
+        if: steps.default_setup.outputs.enabled == 'true'
+        run: |
+          echo "Repository CodeQL default setup is enabled; skipping advanced CodeQL workflow to avoid duplicate SARIF uploads."
