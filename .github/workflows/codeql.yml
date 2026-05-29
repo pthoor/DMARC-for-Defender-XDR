@@ -1,14 +1,7 @@
 name: CodeQL
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-  schedule:
-    - cron: '17 3 * * 1'
+  workflow_dispatch:
 
 permissions:
   actions: read
@@ -37,12 +30,13 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo
               });
-              const enabled = result?.data?.state === 'configured';
-              core.info(`CodeQL default setup state: ${result?.data?.state ?? 'unknown'}`);
+              const state = result?.data?.state ?? 'unknown';
+              const enabled = state !== 'not-configured';
+              core.info(`CodeQL default setup state: ${state}`);
               core.setOutput('enabled', enabled ? 'true' : 'false');
             } catch (error) {
-              core.info(`Could not read default setup state (${error.status ?? 'n/a'}). Assuming not configured.`);
-              core.setOutput('enabled', 'false');
+              core.info(`Could not read default setup state (${error.status ?? 'n/a'}). Assuming configured to avoid duplicate SARIF uploads.`);
+              core.setOutput('enabled', 'true');
             }
 
       - name: Initialize CodeQL
