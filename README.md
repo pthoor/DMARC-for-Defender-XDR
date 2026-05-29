@@ -1,10 +1,16 @@
-# DMARC Analyzer Azure
+# DMARC for Defender XDR
 
-Azure-native DMARC aggregate report analyzer using Azure Functions, Event Grid, and Log Analytics.
+Continuous DMARC detection and policy operations for Defender XDR, powered by Azure serverless ingestion.
 
 ## Overview
 
-This solution automatically processes **DMARC Aggregate Reports (RUA)** from your email infrastructure. It provides real-time analysis and visualization of email authentication results, helping you monitor SPF, DKIM, and DMARC compliance, detect spoofing attempts, and progress toward stricter DMARC policies.
+This solution converts **DMARC Aggregate Reports (RUA)** into actionable security telemetry for Defender XDR and Azure Monitor. Azure handles ingestion and normalization; analysts consume detections, trends, and investigation-ready context.
+
+### Why this solution
+
+- **SOC-ready DMARC signals**: Turn raw XML attachments into queryable records and detection inputs.
+- **Defender XDR-focused operations**: Build hunting and custom detections around spoofing, policy abuse, and sender drift.
+- **Safe policy progression**: Track SPF/DKIM/DMARC outcomes over time before tightening policy enforcement.
 
 ### What are DMARC Reports?
 
@@ -42,22 +48,22 @@ RUF reports provide per-message failure details:
 
 ## Features
 
-- **Real-time Processing**: Automatic ingestion via Microsoft Graph change notifications and Event Grid
-- **Rich Analytics**: Azure Monitor Workbook with comprehensive visualizations
-- **GeoIP Mapping**: Geographic distribution of email sources with pass/fail rates
-- **Sender Identification**: Automatic service recognition via SPF domain matching (Microsoft 365, Google Workspace, SendGrid, Mailchimp, Salesforce, and 16 more)
-- **Alignment Analysis**: Detect SPF/DKIM alignment failures with actionable fix guidance
-- **Subdomain Discovery**: Track email from all subdomains, detect new subdomains, and flag policy gaps
-- **Threat Detection**: Identify spoofing attempts, suspicious source IPs, and volume anomalies
-- **Compliance Tracking**: Monitor SPF, DKIM, and DMARC pass rates per domain with policy health checks
-- **Policy Guidance**: Built-in recommendations for DMARC policy progression with service-specific fix instructions
-- **Proactive Alerting**: Optional Azure Monitor alert rules for pass rate drops, missing reports, stale reporters, duplicate report-key ratio, new threats, and volume spikes
-- **Detection Rules**: Sentinel-compatible YAML detection rules for Defender XDR (importable via pipelines or XDRConverter)
-- **Zero Secrets**: Uses Azure Managed Identity for authentication (no client secrets)
+- **Defender XDR detections**: Sentinel-compatible YAML detection rules for Defender XDR (importable via pipelines or XDRConverter)
+- **Threat hunting telemetry**: DMARC records normalized into Log Analytics for KQL-driven investigations
+- **Real-time processing**: Automatic ingestion via Microsoft Graph change notifications and Event Grid
+- **Rich analytics**: Azure Monitor workbook with domain, sender, and trend analysis
+- **Proactive alerting**: Optional Azure Monitor alert rules for pass-rate drops, missing reports, stale reporters, duplicate report-key ratio, and volume spikes
+- **Sender identification**: Automatic service recognition via SPF domain matching (Microsoft 365, Google Workspace, SendGrid, Mailchimp, Salesforce, and 16 more)
+- **Alignment and compliance analysis**: Surface SPF/DKIM alignment failures and DMARC policy health gaps
+- **Subdomain discovery**: Track email from subdomains, detect newly active senders, and flag policy blind spots
+- **Policy guidance**: Built-in recommendations for staged DMARC policy progression with service-specific fix guidance
+- **Zero secrets**: Uses Azure Managed Identity for authentication (no client secrets)
 - **Privacy-first by design**: RUF forensic reports remain intentionally unsupported to avoid message-level PII processing
-- **Scalable & Cost-Effective**: Serverless architecture, typically under $1/month
+- **Scalable and cost-effective**: Serverless architecture
 
 ## Architecture
+
+High-level flow: Exchange Online mailbox -> Graph change notifications -> Azure Event Grid + Functions -> Log Analytics -> Defender XDR detections and investigations.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture, data flow, and security model.
 
