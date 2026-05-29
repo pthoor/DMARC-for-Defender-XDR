@@ -108,12 +108,58 @@ function Invoke-GraphRequest {
     }
 
     try {
-        return Invoke-RestMethod @params
+        return Invoke-WithRetry -ScriptBlock { Invoke-RestMethod @params }
     }
     catch {
         $statusCode = if ($_.Exception.Response) { $_.Exception.Response.StatusCode.value__ } else { 'N/A' }
         Write-Error "Graph API request failed [$Method $Uri] - HTTP $statusCode : $_"
         throw
+    }
+}
+
+function Invoke-WithRetry {
+    <#
+    .SYNOPSIS
+        Retries a scriptblock on transient HTTP 429/503 errors with exponential backoff and jitter.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [scriptblock]$ScriptBlock,
+        [int]$MaxAttempts = 4,
+        [int]$BaseDelayMs = 1000
+    )
+
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        try {
+            return & $ScriptBlock
+        }
+        catch {
+            $response   = $_.Exception.Response
+            $statusCode = if ($response) { [int]$response.StatusCode } else { 0 }
+
+            if ($attempt -ge $MaxAttempts -or $statusCode -notin @(429, 503)) {
+                throw
+            }
+
+            $delayMs = [int]($BaseDelayMs * [Math]::Pow(2, $attempt - 1))
+
+            # Honor Retry-After header (seconds integer) when present on 429
+            if ($statusCode -eq 429 -and $response) {
+                $retryAfterValues = $null
+                if ($response.Headers.TryGetValues('Retry-After', [ref]$retryAfterValues)) {
+                    $retryAfterSec = 0
+                    if ([int]::TryParse(($retryAfterValues | Select-Object -First 1), [ref]$retryAfterSec) -and $retryAfterSec -gt 0) {
+                        $delayMs = $retryAfterSec * 1000
+                    }
+                }
+            }
+
+            $jitter   = Get-Random -Minimum 0 -Maximum ([Math]::Max(1, [int]($delayMs * 0.2)))
+            $delayMs += $jitter
+            Write-Warning "HTTP $statusCode — attempt $attempt/$MaxAttempts, retrying in ${delayMs}ms..."
+            Start-Sleep -Milliseconds $delayMs
+        }
     }
 }
 
@@ -470,7 +516,11 @@ function ConvertFrom-DmarcXml {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
-        [string]$XmlContent
+        [string]$XmlContent,
+
+        [string]$SourceMessageId,
+
+        [string]$IngestionRunId
     )
 
     $records = [System.Collections.Generic.List[hashtable]]::new()
@@ -532,6 +582,15 @@ function ConvertFrom-DmarcXml {
     $aspf      = $policy.aspf
     $fo        = $policy.fo
 
+    # Duplicate telemetry key scopes report identity by source organization and policy domain.
+    # Report IDs are not guaranteed to be globally unique across providers.
+    $duplicateTelemetryKey = '{0}|{1}|{2}|{3}|{4}' -f `
+        [string]$orgName,
+        [string]$reportId,
+        [string]$domain,
+        [string]$dateBegin,
+        [string]$dateEnd
+
     # ── Records ──
     $recordElements = $feedback.record
     if (-not $recordElements) {
@@ -544,10 +603,24 @@ function ConvertFrom-DmarcXml {
         $recordElements = @($recordElements)
     }
 
+    $sha256    = [System.Security.Cryptography.SHA256]::Create()
+    $recordIdx = -1
+
     foreach ($rec in $recordElements) {
+        $recordIdx++
         $row = $rec.row
         $identifiers = $rec.identifiers
         $authResults = $rec.auth_results
+
+        $reasonType = if ($row.policy_evaluated.reason -is [System.Array]) {
+            ($row.policy_evaluated.reason | ForEach-Object { $_.type }) -join '; '
+        } else { $row.policy_evaluated.reason.type }
+
+        $reasonComment = if ($row.policy_evaluated.reason -is [System.Array]) {
+            ($row.policy_evaluated.reason | ForEach-Object { $_.comment }) -join '; '
+        } else { $row.policy_evaluated.reason.comment }
+
+        $overrideReasonCategory = Get-OverrideReasonCategory -ReasonType $reasonType
 
         # ── Primary DKIM result ──
         $dkimResults = @($authResults.dkim)
@@ -603,6 +676,9 @@ function ConvertFrom-DmarcXml {
             ReportEmail                    = $email
             ReportExtraContactInfo         = $extraContact
             ReportId                       = $reportId
+            SourceMessageId                = $SourceMessageId
+            IngestionRunId                 = $IngestionRunId
+            DuplicateTelemetryKey          = $duplicateTelemetryKey
             ReportDateRangeBegin           = $dateBegin
             ReportDateRangeEnd             = $dateEnd
             Domain                         = $domain
@@ -617,12 +693,9 @@ function ConvertFrom-DmarcXml {
             PolicyEvaluated_disposition    = $row.policy_evaluated.disposition
             PolicyEvaluated_dkim           = $row.policy_evaluated.dkim
             PolicyEvaluated_spf            = $row.policy_evaluated.spf
-            PolicyEvaluated_reason_type    = if ($row.policy_evaluated.reason -is [System.Array]) {
-                ($row.policy_evaluated.reason | ForEach-Object { $_.type }) -join '; '
-            } else { $row.policy_evaluated.reason.type }
-            PolicyEvaluated_reason_comment = if ($row.policy_evaluated.reason -is [System.Array]) {
-                ($row.policy_evaluated.reason | ForEach-Object { $_.comment }) -join '; '
-            } else { $row.policy_evaluated.reason.comment }
+            PolicyEvaluated_reason_type    = $reasonType
+            PolicyEvaluated_reason_comment = $reasonComment
+            OverrideReasonCategory         = $overrideReasonCategory
             HeaderFrom                     = $identifiers.header_from
             EnvelopeFrom                   = $identifiers.envelope_from
             EnvelopeTo                     = $identifiers.envelope_to
@@ -634,12 +707,43 @@ function ConvertFrom-DmarcXml {
             SpfScope                       = $primarySpfScope
             DkimAuthResults                = $dkimJson
             SpfAuthResults                 = $spfJson
+            RecordIndex                    = $recordIdx
+            Aligned_dkim                   = ($row.policy_evaluated.dkim -eq 'pass')
+            Aligned_spf                    = ($row.policy_evaluated.spf  -eq 'pass')
+            DmarcPass                      = ($row.policy_evaluated.dkim -eq 'pass' -or $row.policy_evaluated.spf -eq 'pass')
         }
+
+        # Deterministic hash for cross-run deduplication (SourceMessageId|ReportId|RecordIndex|SourceIP|HeaderFrom)
+        $hashInput       = [System.Text.Encoding]::UTF8.GetBytes(
+            "$SourceMessageId|$reportId|$recordIdx|$($row.source_ip)|$($identifiers.header_from)")
+        $record['MessageHash'] = [System.BitConverter]::ToString($sha256.ComputeHash($hashInput)).Replace('-', '').ToLower()
 
         $records.Add($record)
     }
 
+    $sha256.Dispose()
     return $records.ToArray()
+}
+
+function Get-OverrideReasonCategory {
+    [CmdletBinding()]
+    param(
+        [string]$ReasonType
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ReasonType)) {
+        return $null
+    }
+
+    $normalizedReasons = @($ReasonType -split ';' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+
+    foreach ($knownReason in @('forwarded', 'mailing_list', 'trusted_forwarder', 'local_policy', 'sampled_out')) {
+        if ($normalizedReasons -contains $knownReason) {
+            return $knownReason
+        }
+    }
+
+    return 'other'
 }
 
 function Convert-EpochToIso {
@@ -701,7 +805,7 @@ function Send-DmarcRecordsToLogAnalytics {
     }
 
     try {
-        Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body
+        Invoke-WithRetry -ScriptBlock { Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body }
         Write-Information "Successfully sent $($Records.Count) records to Log Analytics."
     }
     catch {
@@ -736,6 +840,8 @@ function Invoke-DmarcReportProcessing {
     )
 
     Write-Information "Processing message: $MessageId"
+    $ingestionRunId = [guid]::NewGuid().ToString()
+    Write-Information "Ingestion run ID: $ingestionRunId"
 
     # Get Graph token once for all operations
     $graphToken = Get-ManagedIdentityToken -Resource 'https://graph.microsoft.com'
@@ -765,7 +871,7 @@ function Invoke-DmarcReportProcessing {
     # Parse DMARC XML contents
     $allDmarcRecords = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($xmlContent in $xmlContents) {
-        $parsed = @(ConvertFrom-DmarcXml -XmlContent $xmlContent)
+        $parsed = @(ConvertFrom-DmarcXml -XmlContent $xmlContent -SourceMessageId $MessageId -IngestionRunId $ingestionRunId)
         foreach ($rec in $parsed) {
             $allDmarcRecords.Add($rec)
         }

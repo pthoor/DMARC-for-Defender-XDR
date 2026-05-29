@@ -17,7 +17,9 @@ param location string = resourceGroup().location
 @maxLength(16)
 param baseName string = 'dmarc'
 
-@description('Object ID of the shared mailbox user in Entra ID.')
+@description('Object ID (GUID) or user principal name (UPN) of the shared mailbox user in Entra ID.')
+@minLength(3)
+@maxLength(255)
 param mailboxUserId string
 
 @description('Random secret used to validate Graph change notifications.')
@@ -31,6 +33,18 @@ param retentionInDays int = 90
 
 @description('Use an existing Log Analytics workspace. Leave empty to create a new one.')
 param existingWorkspaceId string = ''
+
+@description('''Resource ID of the Log Analytics workspace that receives diagnostic/audit logs from the Function App, Key Vault, and Storage Account.
+
+Leave empty (default) to send diagnostic logs to the same workspace as DMARC data — simplest option for single-workspace deployments.
+
+Set to a different workspace when:
+  • You have a Sentinel-connected LAW and want audit events to feed into Sentinel analytics rules and incidents.
+  • You separate operational/security logs from application data for cost or retention reasons.
+
+Example: /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<sentinel-law-name>
+''')
+param diagnosticsWorkspaceId string = ''
 
 @description('Optional: Resource ID of an existing Application Insights instance.')
 param existingAppInsightsId string = ''
@@ -46,6 +60,9 @@ param alertActionGroupId string = ''
 
 @description('Deployment timestamp for partner authorization expiration. Do not set manually.')
 param deploymentTime string = utcNow()
+
+@description('Client ID of the Entra ID app registration whose bearers may call the admin HTTP functions (BackfillProcessor, SetupHelper). When set, Easy Auth is enabled on the Function App. After confirming Easy Auth is working, change authLevel in BackfillProcessor/function.json and SetupHelper/function.json from "admin" to "anonymous".')
+param adminEntraAppClientId string = ''
 
 // ── Variables ──
 
@@ -90,6 +107,10 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = if (e
 
 var workspaceId = empty(existingWorkspaceId) ? workspace.id : existingWorkspaceId
 
+// Diagnostic logs (Key Vault, Function App, Storage) go here. Defaults to the DMARC LAW;
+// set diagnosticsWorkspaceId to a Sentinel or ops LAW to route audit events separately.
+var diagnosticsWorkspaceResourceId = empty(diagnosticsWorkspaceId) ? workspaceId : diagnosticsWorkspaceId
+
 var resolvedWorkspaceName = empty(existingWorkspaceId)
   ? workspaceName
   : last(split(existingWorkspaceId, '/'))
@@ -107,6 +128,9 @@ resource customTable 'Microsoft.OperationalInsights/workspaces/tables@2022-10-01
         { name: 'ReportEmail', type: 'string' }
         { name: 'ReportExtraContactInfo', type: 'string' }
         { name: 'ReportId', type: 'string' }
+        { name: 'SourceMessageId', type: 'string' }
+        { name: 'IngestionRunId', type: 'string' }
+        { name: 'DuplicateTelemetryKey', type: 'string' }
         { name: 'ReportDateRangeBegin', type: 'dateTime' }
         { name: 'ReportDateRangeEnd', type: 'dateTime' }
         { name: 'Domain', type: 'string' }
@@ -123,6 +147,7 @@ resource customTable 'Microsoft.OperationalInsights/workspaces/tables@2022-10-01
         { name: 'PolicyEvaluated_spf', type: 'string' }
         { name: 'PolicyEvaluated_reason_type', type: 'string' }
         { name: 'PolicyEvaluated_reason_comment', type: 'string' }
+        { name: 'OverrideReasonCategory', type: 'string' }
         { name: 'HeaderFrom', type: 'string' }
         { name: 'EnvelopeFrom', type: 'string' }
         { name: 'EnvelopeTo', type: 'string' }
@@ -134,6 +159,11 @@ resource customTable 'Microsoft.OperationalInsights/workspaces/tables@2022-10-01
         { name: 'SpfScope', type: 'string' }
         { name: 'DkimAuthResults', type: 'string' }
         { name: 'SpfAuthResults', type: 'string' }
+        { name: 'RecordIndex', type: 'int' }
+        { name: 'MessageHash', type: 'string' }
+        { name: 'Aligned_dkim', type: 'boolean' }
+        { name: 'Aligned_spf', type: 'boolean' }
+        { name: 'DmarcPass', type: 'boolean' }
       ]
     }
     retentionInDays: retentionInDays
@@ -169,6 +199,9 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'ReportEmail', type: 'string' }
           { name: 'ReportExtraContactInfo', type: 'string' }
           { name: 'ReportId', type: 'string' }
+          { name: 'SourceMessageId', type: 'string' }
+          { name: 'IngestionRunId', type: 'string' }
+          { name: 'DuplicateTelemetryKey', type: 'string' }
           { name: 'ReportDateRangeBegin', type: 'datetime' }
           { name: 'ReportDateRangeEnd', type: 'datetime' }
           { name: 'Domain', type: 'string' }
@@ -185,6 +218,7 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'PolicyEvaluated_spf', type: 'string' }
           { name: 'PolicyEvaluated_reason_type', type: 'string' }
           { name: 'PolicyEvaluated_reason_comment', type: 'string' }
+          { name: 'OverrideReasonCategory', type: 'string' }
           { name: 'HeaderFrom', type: 'string' }
           { name: 'EnvelopeFrom', type: 'string' }
           { name: 'EnvelopeTo', type: 'string' }
@@ -196,6 +230,11 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'SpfScope', type: 'string' }
           { name: 'DkimAuthResults', type: 'string' }
           { name: 'SpfAuthResults', type: 'string' }
+          { name: 'RecordIndex', type: 'int' }
+          { name: 'MessageHash', type: 'string' }
+          { name: 'Aligned_dkim', type: 'boolean' }
+          { name: 'Aligned_spf', type: 'boolean' }
+          { name: 'DmarcPass', type: 'boolean' }
         ]
       }
     }
@@ -263,6 +302,7 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enabledForTemplateDeployment: false
     enableSoftDelete: true
     softDeleteRetentionInDays: 90
+    enablePurgeProtection: true
     // Public network access is enabled to avoid the complexity and cost of private endpoints.
     // Access is controlled via RBAC - only the Function App's managed identity can read secrets.
     publicNetworkAccess: 'Enabled'
@@ -436,6 +476,49 @@ resource storageTableDataContributor 'Microsoft.Authorization/roleAssignments@20
   }
 }
 
+// ── Easy Auth (App Service Authentication) for admin HTTP endpoints ──
+// When adminEntraAppClientId is set, all HTTP requests to the Function App must carry
+// a valid Entra ID bearer token issued for that app. The Event Grid webhook path is
+// excluded so DMARC event delivery is not affected.
+// After confirming Easy Auth is working, change authLevel in
+// BackfillProcessor/function.json and SetupHelper/function.json from "admin" to "anonymous".
+
+resource functionAppAuthSettings 'Microsoft.Web/sites/config@2024-04-01' = if (!empty(adminEntraAppClientId)) {
+  name: 'authsettingsV2'
+  parent: functionApp
+  properties: {
+    globalValidation: {
+      requireAuthentication: true
+      unauthenticatedClientAction: 'Return401'
+      excludedPaths: [
+        '/runtime/webhooks/eventgrid'
+      ]
+    }
+    identityProviders: {
+      azureActiveDirectory: {
+        enabled: true
+        registration: {
+          clientId: adminEntraAppClientId
+          openIdIssuer: 'https://sts.windows.net/${subscription().tenantId}/v2.0'
+        }
+        validation: {
+          allowedAudiences: [
+            'api://${adminEntraAppClientId}'
+          ]
+        }
+      }
+    }
+    login: {
+      tokenStore: {
+        enabled: false
+      }
+    }
+    httpSettings: {
+      requireHttps: true
+    }
+  }
+}
+
 // ── Event Grid Partner Configuration ──
 // Authorizes Microsoft Graph API as an Event Grid partner so that Graph change
 // notification subscriptions can create partner topics in this resource group.
@@ -455,6 +538,57 @@ resource partnerConfiguration 'Microsoft.EventGrid/partnerConfigurations@2022-06
       ]
     }
   }
+}
+
+// ── Diagnostic Settings → Log Analytics Workspace ──
+// Forwards audit/platform logs to diagnosticsWorkspaceResourceId (defaults to the DMARC LAW;
+// override with a Sentinel or ops LAW via the diagnosticsWorkspaceId parameter).
+
+resource keyVaultDiagSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'dmarc-kv-diag'
+  scope: keyVault
+  properties: {
+    workspaceId: diagnosticsWorkspaceResourceId
+    logs: [
+      {
+        categoryGroup: 'audit'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource functionAppDiagSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'dmarc-func-diag'
+  scope: functionApp
+  properties: {
+    workspaceId: diagnosticsWorkspaceResourceId
+    logs: [
+      {
+        category: 'FunctionAppLogs'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource storageBlobDiagSettings 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
+  name: 'dmarc-blob-diag'
+  scope: storageAccountBlobService
+  properties: {
+    workspaceId: diagnosticsWorkspaceResourceId
+    logs: [
+      {
+        categoryGroup: 'audit'
+        enabled: true
+      }
+    ]
+  }
+}
+
+resource storageAccountBlobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' existing = {
+  parent: storageAccount
+  name: 'default'
 }
 
 // ── Alert Rules (optional) ──

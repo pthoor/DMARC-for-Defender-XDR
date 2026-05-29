@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.1.0] - 2026-05-08
 
 ### Added
-- Added a repository audit deliverable at `docs/OPEN_SOURCE_READINESS_AUDIT.md` covering DMARC detection gaps, KQL correctness checks, release-readiness roadmap, and Graph query feasibility guidance.
 - Added a root `VERSION` file for tenant-deployment-safe artifact version tracking.
 - Added `tests/Versioning.Tests.ps1` to validate version metadata consistency and KQL safety guards.
 

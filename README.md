@@ -51,14 +51,23 @@ RUF reports provide per-message failure details:
 - **Threat Detection**: Identify spoofing attempts, suspicious source IPs, and volume anomalies
 - **Compliance Tracking**: Monitor SPF, DKIM, and DMARC pass rates per domain with policy health checks
 - **Policy Guidance**: Built-in recommendations for DMARC policy progression with service-specific fix instructions
-- **Proactive Alerting**: Optional Azure Monitor alert rules for pass rate drops, missing reports, new threats, and volume spikes
+- **Proactive Alerting**: Optional Azure Monitor alert rules for pass rate drops, missing reports, stale reporters, duplicate report-key ratio, new threats, and volume spikes
 - **Detection Rules**: Sentinel-compatible YAML detection rules for Defender XDR (importable via pipelines or XDRConverter)
 - **Zero Secrets**: Uses Azure Managed Identity for authentication (no client secrets)
+- **Privacy-first by design**: RUF forensic reports remain intentionally unsupported to avoid message-level PII processing
 - **Scalable & Cost-Effective**: Serverless architecture, typically under $1/month
 
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed architecture, data flow, and security model.
+
+## Operational and Governance Docs
+
+- [docs/RUNBOOK.md](docs/RUNBOOK.md) - incident response and recovery procedures
+- [docs/PRIVACY.md](docs/PRIVACY.md) - data handling, retention, and compliance notes
+- [docs/KQL_RECIPES.md](docs/KQL_RECIPES.md) - reusable investigation and reporting queries
+- [docs/POLICY_PROGRESSION_PLAYBOOK.md](docs/POLICY_PROGRESSION_PLAYBOOK.md) - staged DMARC policy rollout guide
+- [scripts/Test-DmarcDeployment.ps1](scripts/Test-DmarcDeployment.ps1) - post-deploy validation script
 
 ## Versioning and Release Metadata
 
@@ -67,18 +76,24 @@ This project uses **Semantic Versioning** (`MAJOR.MINOR.PATCH`) to support safe 
 - Source-of-truth version: [`VERSION`](VERSION)
 - Release history: [`CHANGELOG.md`](CHANGELOG.md)
 - Workbook release marker: `workbook/dmarc-workbook.json` header
+- Workbook update check links: GitHub repository + latest releases link in workbook header
 - Detection rule metadata: `detections/*.yaml` (`version:` field)
-
-For the current open-source readiness audit, including KQL correctness findings and roadmap guidance, see [`docs/OPEN_SOURCE_READINESS_AUDIT.md`](docs/OPEN_SOURCE_READINESS_AUDIT.md).
 
 ## Prerequisites
 
 - Azure subscription with permissions to create resources
 - Microsoft 365 tenant with Exchange Online
 - A shared mailbox to receive DMARC reports (e.g., `dmarc@example.com`)
-- Azure CLI
-- PowerShell 7.4+ (for setup scripts)
-- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) (`func` CLI for publishing)
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (>= 2.50)
+- [PowerShell 7.4+](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-linux) (for setup scripts)
+  ```bash
+  # Linux / Codespace
+  sudo apt-get install -y powershell
+  ```
+- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) v4 (`func` CLI for publishing)
+  ```bash
+  npm install -g azure-functions-core-tools@4 --unsafe-perm true
+  ```
 - PowerShell modules for Step 3 (install once):
   ```powershell
   Install-Module Az.Accounts -Scope CurrentUser -Force
@@ -90,7 +105,14 @@ For the current open-source readiness audit, including KQL correctness findings 
 
 ### 1. Deploy Azure Resources
 
-First, set the required environment variables. The `.bicepparam` file uses `readEnvironmentVariable()` to keep secrets and tenant-specific values out of source control.
+First, authenticate and select the right subscription:
+
+```bash
+az login
+az account set --subscription "<your-subscription-id>"
+```
+
+Then, set the required environment variables. The `.bicepparam` file uses `readEnvironmentVariable()` to keep secrets and tenant-specific values out of source control.
 
 **PowerShell:**
 ```powershell
@@ -320,6 +342,204 @@ _dmarc.example.com. IN TXT "v=DMARC1; p=reject; rua=mailto:dmarc@example.com; ad
 5. Click **Apply**
 6. Save the workbook with a name like "DMARC Analytics"
 
+### 8. Run Graph Parity Diagnostic (Optional, Advanced)
+
+If you need ingestion confidence checks (for example during incident response), run the parity preview script:
+
+```powershell
+./scripts/Invoke-GraphParityPreview.ps1 `
+  -MailboxUserId '<mailbox-object-id>' `
+  -WorkspaceId '<log-analytics-workspace-id>' `
+  -StartDateUtc (Get-Date).ToUniversalTime().AddDays(-7) `
+  -EndDateUtc (Get-Date).ToUniversalTime() `
+  -OutputPath './parity-report.json'
+```
+
+This compares Graph message IDs with `DMARCReports_CL.SourceMessageId` and produces triage-oriented mismatch output.
+
+- This script is intended to run in the **customer tenant context** (operator machine, automation account, or tenant-owned runner).
+- It is not part of the required deployment workflow.
+- It should not be used as a hard gate for normal ingestion unless your team explicitly opts in.
+
+## Upgrading an Existing Deployment
+
+Use this when you already have a working deployment and want to apply a new version of the tool. The Bicep deployment is **idempotent** — you run the same command as the initial install and ARM reconciles the diff.
+
+**Required tools** (same as [Prerequisites](#prerequisites)): Azure CLI, PowerShell 7.4+, Azure Functions Core Tools (`func`).
+
+Before running any commands, authenticate and confirm the CLI is targeting the right subscription:
+
+```bash
+az login
+az account show --query "{name:name, id:id}" -o table
+az account set --subscription "<your-subscription-id>"   # if needed
+```
+
+> **Critical:** Do **not** regenerate `GRAPH_CLIENT_STATE`. The existing Graph subscription was created with the current value. Replacing it would cause every incoming Event Grid notification to fail client-state validation until you also recreate the subscription.
+
+### Step 1: Retrieve your existing values
+
+Pull the current `MAILBOX_USER_ID` and `GRAPH_CLIENT_STATE` from your live deployment — do not set new ones.
+
+**PowerShell:**
+```powershell
+$funcName = "dmarc-func-xyz123"   # from original deployment output
+$rg       = "rg-dmarc-prod"
+
+$env:MAILBOX_USER_ID = az functionapp config appsettings list `
+  --name $funcName --resource-group $rg `
+  --query "[?name=='MAILBOX_USER_ID'].value" -o tsv
+
+# Parse the Key Vault name out of the app setting KV reference
+$kvRef  = az functionapp config appsettings list `
+  --name $funcName --resource-group $rg `
+  --query "[?name=='GRAPH_CLIENT_STATE'].value" -o tsv
+$kvName = [regex]::Match($kvRef, 'https://([^.]+)\.vault\.azure\.net').Groups[1].Value
+
+$env:GRAPH_CLIENT_STATE = az keyvault secret show `
+  --vault-name $kvName --name graph-client-state `
+  --query value -o tsv
+
+# If you get a Forbidden error above, grant yourself Key Vault Secrets User first:
+# $myOid = az ad signed-in-user show --query id -o tsv
+# az role assignment create --role "Key Vault Secrets User" --assignee $myOid `
+#   --scope (az keyvault show --name $kvName --query id -o tsv)
+
+# Capture the Graph subscription ID — Bicep will wipe it during redeployment
+$graphSubscriptionId = az functionapp config appsettings list `
+  --name $funcName --resource-group $rg `
+  --query "[?name=='GRAPH_SUBSCRIPTION_ID'].value" -o tsv
+```
+
+**Bash:**
+```bash
+FUNC_NAME="dmarc-func-xyz123"
+RG="rg-dmarc-prod"
+
+export MAILBOX_USER_ID=$(az functionapp config appsettings list \
+  --name "$FUNC_NAME" --resource-group "$RG" \
+  --query "[?name=='MAILBOX_USER_ID'].value" -o tsv)
+
+# Parse the Key Vault name out of the app setting KV reference
+KV_REF=$(az functionapp config appsettings list \
+  --name "$FUNC_NAME" --resource-group "$RG" \
+  --query "[?name=='GRAPH_CLIENT_STATE'].value" -o tsv)
+KV_NAME=$(echo "$KV_REF" | grep -oP '(?<=https://)[^.]+')
+
+export GRAPH_CLIENT_STATE=$(az keyvault secret show \
+  --vault-name "$KV_NAME" --name graph-client-state \
+  --query value -o tsv)
+
+# Capture the Graph subscription ID — Bicep will wipe it during redeployment
+GRAPH_SUBSCRIPTION_ID=$(az functionapp config appsettings list \
+  --name "$FUNC_NAME" --resource-group "$RG" \
+  --query "[?name=='GRAPH_SUBSCRIPTION_ID'].value" -o tsv)
+```
+
+### Step 2: Preview changes (recommended)
+
+Use `--what-if` to see exactly what ARM will create, modify, or delete before committing:
+
+**PowerShell:**
+```powershell
+az deployment group what-if `
+  --resource-group $rg `
+  --template-file infra/main.bicep `
+  --parameters infra/main.bicepparam
+```
+
+**Bash:**
+```bash
+az deployment group what-if \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam
+```
+
+### Step 3: Deploy infrastructure
+
+Same command as the initial deployment — ARM handles the diff:
+
+**PowerShell:**
+```powershell
+az deployment group create `
+  --resource-group $rg `
+  --template-file infra/main.bicep `
+  --parameters infra/main.bicepparam
+```
+
+**Bash:**
+```bash
+az deployment group create \
+  --resource-group "$RG" \
+  --template-file infra/main.bicep \
+  --parameters infra/main.bicepparam
+```
+
+### Step 3b: Restore Graph subscription ID
+
+Bicep replaces all Function App settings with only what is defined in the template, wiping `GRAPH_SUBSCRIPTION_ID`. The Graph subscription itself is still alive in Microsoft Graph — restore the pointer:
+
+**PowerShell:**
+```powershell
+az functionapp config appsettings set `
+  --name $funcName --resource-group $rg `
+  --settings "GRAPH_SUBSCRIPTION_ID=$graphSubscriptionId"
+```
+
+**Bash:**
+```bash
+az functionapp config appsettings set \
+  --name "$FUNC_NAME" --resource-group "$RG" \
+  --settings "GRAPH_SUBSCRIPTION_ID=$GRAPH_SUBSCRIPTION_ID"
+```
+
+> If `GRAPH_SUBSCRIPTION_ID` was already missing before this upgrade (e.g. first time running these steps), run `New-GraphSubscription.ps1` from Step 4 of the initial deployment instead. The script uses the Az PowerShell module — authenticate first with `Connect-AzAccount -UseDeviceAuthentication` if running on Linux or a Codespace.
+
+### Step 4: Publish function code
+
+**PowerShell:**
+```powershell
+cd src/function
+func azure functionapp publish $funcName --powershell
+```
+
+**Bash:**
+```bash
+cd src/function
+func azure functionapp publish "$FUNC_NAME" --powershell
+```
+
+**That's it.** You do not need to re-run Exchange RBAC or Graph subscription setup — those are already in place. The Graph subscription ID is restored in Step 3b above.
+
+### What changes between versions
+
+| Component | Behavior on upgrade |
+|-----------|-------------------|
+| Function App code | Replaced by `func publish` |
+| LAW custom table schema | New columns added; existing rows get `null` for them |
+| DCR stream declaration | New columns added; no data loss |
+| Key Vault purge protection | Enabled if not already set (one-way, intentional) |
+| Diagnostic settings | New resources created if not present |
+| `GRAPH_CLIENT_STATE` | Unchanged — same value written back to Key Vault |
+| Graph subscription | Unchanged — auto-renews via `RenewGraphSubscription` |
+| Exchange RBAC | Unchanged |
+
+### Note on schema changes and historical data
+
+New columns (`MessageHash`, `RecordIndex`, `Aligned_dkim`, `Aligned_spf`, `DmarcPass`) are `null` for rows ingested before the upgrade. Workbook queries and detections that filter on `DmarcPass` will silently skip pre-upgrade rows.
+
+To maintain continuity in workbook visuals during the transition window, use a coalesce fallback:
+
+```kql
+| extend DmarcPassEffective = coalesce(
+    DmarcPass,
+    tolower(PolicyEvaluated_dkim) == 'pass' or tolower(PolicyEvaluated_spf) == 'pass'
+  )
+```
+
+Replace `DmarcPass` with `DmarcPassEffective` in any workbook tiles that show pass-rate trends. Once historical rows age out of your retention window, you can remove the fallback.
+
 ## Alerting & Notifications
 
 ### Option 1: Deploy Alert Rules via Bicep (Recommended)
@@ -337,11 +557,13 @@ az deployment group create `
   --parameters deployAlerts=true alertActionGroupId='/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Insights/actionGroups/<name>'
 ```
 
-This deploys 4 alert rules:
+This deploys 6 alert rules:
 - **DMARC Pass Rate Drop** — fires when pass rate drops below threshold (default 90%), runs every 1 hour
 - **No Reports Received** — fires when no reports ingested in 48+ hours, runs every 24 hours
 - **New Suspicious Source IP** — fires when a new IP appears with both SPF and DKIM failing, runs every 6 hours
 - **Volume Spike** — fires when daily volume exceeds 3x the 30-day baseline, runs every 1 hour
+- **Stale Reporters** — fires when previously active reporters stop sending for 72+ hours, runs every 12 hours
+- **Duplicate Report-Key Ratio** — low-severity signal when duplicate telemetry ratio exceeds threshold, runs every 6 hours
 
 ### Option 2: Manual Alert Rules
 
@@ -377,7 +599,7 @@ See [`detections/README.md`](detections/README.md) for full instructions.
 
 ## Workbook Capabilities
 
-The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 tabs with 42 KQL visualizations:
+The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 tabs with the following visualization and operations views:
 
 ### Executive Summary
 - Total message volume, unique source IPs, reporters, pass rate (KPI tiles)
@@ -417,9 +639,11 @@ The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 
 
 ### Reporting & Ops
 - Report freshness monitor (color-coded per reporter)
+- Freshness state counts and stalled-reporter visibility
+- Duplicate report-key ratio and top duplicate contributors
 - Reporter coverage and missing expected reporters
 - Reports by provider and report volume over time
-- Azure Monitor alert rule templates (4 ready-to-use KQL queries)
+- Azure Monitor alert rule templates (5 ready-to-use KQL queries)
 - Policy guidance for DMARC policy progression
 
 ## Troubleshooting
@@ -439,6 +663,15 @@ The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 
    - Log Analytics: `Monitoring Metrics Publisher` on DCR
 2. **Check Graph subscription status**: Should be "enabled" and not expired
 3. **Review Function logs** for errors
+
+### Data Confidence / Parity Validation (Optional)
+
+If users suspect ingestion gaps, run [scripts/Invoke-GraphParityPreview.ps1](scripts/Invoke-GraphParityPreview.ps1) and review:
+- `missingLikelyInLogAnalyticsCount`
+- `missingCandidateInLogAnalyticsCount`
+- `triageSummary`
+
+Use `sampleMissingTriage` from the output report to separate likely non-DMARC noise from likely processing gaps before taking replay actions.
 
 ### Permission Errors
 
@@ -469,7 +702,7 @@ Invoke-Pester -Path ./tests -Output Detailed
 ```
 
 ### Test Coverage
-- ✅ **147 tests** covering all PowerShell scripts
+- ✅ Comprehensive Pester coverage across PowerShell scripts and deployment helpers
 - ✅ Module functions (token acquisition, Graph API, DMARC XML parsing, attachment extraction)
 - ✅ Setup scripts (New-GraphSubscription.ps1, Grant-MIExchangeRBAC.ps1)
 - ✅ Azure Functions (DmarcReportProcessor, RenewGraphSubscription, CatchupProcessor, BackfillProcessor)

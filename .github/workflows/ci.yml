@@ -87,38 +87,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Scan for credentials
-        shell: pwsh
-        run: |
-          $patterns = @(
-            'password\s*=',
-            'secret\s*=',
-            'api_key\s*=',
-            'connectionstring\s*=',
-            'AKIA[0-9A-Z]{16}',
-            'ghp_[a-zA-Z0-9]{36}',
-            'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'
-          )
-          $excludeArgs = @(
-            '--',
-            ':(exclude)*.md',
-            ':(exclude)LICENSE',
-            ':(exclude)*.Tests.ps1',
-            ':(exclude)*.bicep',
-            ':(exclude)*.bicepparam',
-            ':(exclude)*.yml',
-            ':(exclude)*.yaml'
-          )
-          $findings = @()
-          foreach ($pattern in $patterns) {
-            $result = git grep -n -E $pattern @excludeArgs 2>&1
-            if ($LASTEXITCODE -eq 0 -and $result) {
-              $findings += $result
-            }
-          }
-          if ($findings.Count -gt 0) {
-            $findings | ForEach-Object { Write-Host $_ }
-            throw "Credential scan found $($findings.Count) potential secret(s)."
-          }
-          Write-Host "No credentials detected."
-          exit 0
+      - name: TruffleHog secret scan
+        uses: trufflesecurity/trufflehog@v3.90.5
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extra_args: --results=verified,unknown --fail

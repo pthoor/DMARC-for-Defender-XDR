@@ -83,7 +83,7 @@ The Graph subscription watches: `users/{mailboxUserId}/mailFolders('Inbox')/mess
 
 The `DMARCReports_CL` table uses a flat schema — one row per `<record>` element in the DMARC XML. Report metadata and policy are repeated across records from the same report.
 
-### Columns (32)
+### Columns (41)
 
 | Column | Type | Source |
 |---|---|---|
@@ -92,6 +92,9 @@ The `DMARCReports_CL` table uses a flat schema — one row per `<record>` elemen
 | ReportEmail | string | `report_metadata/email` |
 | ReportExtraContactInfo | string | `report_metadata/extra_contact_info` |
 | ReportId | string | `report_metadata/report_id` |
+| SourceMessageId | string | Graph message ID for ingestion correlation |
+| IngestionRunId | string | Processing run identifier for dedupe analysis |
+| DuplicateTelemetryKey | string | Stable report key (`ReportOrgName|ReportId|Domain`) used for duplicate tracking |
 | ReportDateRangeBegin | datetime | `report_metadata/date_range/begin` (epoch→ISO) |
 | ReportDateRangeEnd | datetime | `report_metadata/date_range/end` (epoch→ISO) |
 | Domain | string | `policy_published/domain` |
@@ -119,6 +122,27 @@ The `DMARCReports_CL` table uses a flat schema — one row per `<record>` elemen
 | SpfScope | string | First `auth_results/spf/scope` |
 | DkimAuthResults | string | Full DKIM results as JSON array |
 | SpfAuthResults | string | Full SPF results as JSON array |
+| RecordIndex | int | Zero-based `<record>` index within one XML report |
+| MessageHash | string | Deterministic SHA-256 hash over message/report/record identity |
+| Aligned_dkim | boolean | DMARC policy evaluation outcome for DKIM alignment |
+| Aligned_spf | boolean | DMARC policy evaluation outcome for SPF alignment |
+| DmarcPass | boolean | `true` when at least one of SPF or DKIM aligns/passes |
+| OverrideReasonCategory | string | Derived category: `forwarded`, `mailing_list`, `trusted_forwarder`, `local_policy`, `sampled_out`, `other` |
+
+### Sample values and null semantics
+
+| Column | Example value | Null / empty convention |
+|---|---|---|
+| Domain | `example.com` | Must be present in valid DMARC reports |
+| HeaderFrom | `news.example.com` | Empty when sender omits identifier |
+| SourceIP | `198.51.100.24` | Empty when XML report row is malformed |
+| DkimSelector | `selector1` | Empty when no DKIM auth result exists |
+| PolicyEvaluated_reason_type | `forwarded; local_policy` | Empty when no override reason is provided |
+| OverrideReasonCategory | `forwarded` | `other` for unknown reasons, null when no reason exists |
+| MessageHash | `1f4f0f...` (64 hex chars) | Always present for parsed records |
+| DmarcPass | `true` | Always present for parsed records |
+| SourceMessageId | Graph message ID | Can be empty for historical or manually ingested test data |
+| IngestionRunId | GUID | Can be empty for historical or manually ingested test data |
 
 ## Cost Estimate (typical mid-size org)
 

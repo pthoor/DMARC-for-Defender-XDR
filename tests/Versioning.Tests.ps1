@@ -29,6 +29,12 @@ Describe 'Versioning and query safety metadata' {
         It 'Workbook header should include workbook release metadata' {
             $workbookContent | Should -Match "Workbook release[:*\s]+v$([regex]::Escape($version))"
         }
+
+        It 'Workbook header should include GitHub release links and update-check guidance' {
+            $workbookContent | Should -Match 'https://github\.com/pthoor/DMARC-Analyzer-Azure'
+            $workbookContent | Should -Match 'https://github\.com/pthoor/DMARC-Analyzer-Azure/releases/latest'
+            $workbookContent | Should -Match 'Update check'
+        }
     }
 
     Context 'KQL safety guardrails' {
@@ -40,7 +46,7 @@ Describe 'Versioning and query safety metadata' {
         }
 
         It 'Alert pass-rate logic should use DMARC semantics (SPF OR DKIM pass)' {
-            $alertsContent | Should -Match 'PassedMessages\s*=\s*sumif\(MessageCountSafe, PolicyEvaluated_dkim == "pass" or PolicyEvaluated_spf == "pass"\)'
+            $alertsContent | Should -Match 'PassedMessages\s*=\s*sumif\(MessageCountSafe, PolicyEvaluated_dkim =~ "pass" or PolicyEvaluated_spf =~ "pass"\)'
         }
     }
 }

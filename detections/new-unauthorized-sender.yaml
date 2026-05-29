@@ -17,6 +17,7 @@ tactics:
   - InitialAccess
 relevantTechniques:
   - T1566
+  - T1589
 query: |
   let known = DMARCReports_CL
   | where TimeGenerated between (ago(14d) .. ago(6h))
@@ -25,13 +26,15 @@ query: |
   DMARCReports_CL
   | where TimeGenerated > ago(6h)
   | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
-  | where tolower(PolicyEvaluated_dkim) == 'fail' and tolower(PolicyEvaluated_spf) == 'fail'
+  | where DmarcPass == false
   | where isnotempty(SourceIP)
   | where SourceIP !in (known)
   | summarize
       FailedMessages = sum(MessageCountSafe),
       Domains = make_set(Domain, 10),
       HeaderFroms = make_set(HeaderFrom, 10),
+      SampleDomain = anyif(Domain, isnotempty(Domain)),
+      SampleHeaderFrom = anyif(HeaderFrom, isnotempty(HeaderFrom)),
       SpfDomains = make_set(SpfDomain, 5)
       by SourceIP
   | where FailedMessages >= 10
@@ -40,5 +43,13 @@ entityMappings:
     fieldMappings:
       - identifier: Address
         columnName: SourceIP
+  - entityType: DNS
+    fieldMappings:
+      - identifier: DomainName
+        columnName: SampleDomain
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: SampleHeaderFrom
 version: 1.1.0
 kind: Scheduled

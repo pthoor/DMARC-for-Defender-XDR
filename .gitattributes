@@ -1,0 +1,4 @@
+# Mark generated/exported artifacts so GitHub hides them by default in PRs.
+infra/main.json linguist-generated=true
+infra/alerts.json linguist-generated=true
+workbook/dmarc-workbook.json linguist-generated=true

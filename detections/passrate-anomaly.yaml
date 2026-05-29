@@ -18,12 +18,13 @@ tactics:
   - InitialAccess
 relevantTechniques:
   - T1566
+  - T1589
 query: |
   let baseline = DMARCReports_CL
   | where TimeGenerated between (ago(14d) .. ago(1d))
   | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
   | summarize
-      BaselinePass = sumif(MessageCountSafe, tolower(PolicyEvaluated_dkim) == 'pass' or tolower(PolicyEvaluated_spf) == 'pass'),
+      BaselinePass = sumif(MessageCountSafe, DmarcPass == true),
       BaselineTotal = sum(MessageCountSafe)
       by Domain
   | where BaselineTotal >= 100
@@ -32,8 +33,9 @@ query: |
   | where TimeGenerated > ago(1d)
   | extend MessageCountSafe = tolong(coalesce(MessageCount, 0))
   | summarize
-      RecentPass = sumif(MessageCountSafe, tolower(PolicyEvaluated_dkim) == 'pass' or tolower(PolicyEvaluated_spf) == 'pass'),
-      RecentTotal = sum(MessageCountSafe)
+      RecentPass = sumif(MessageCountSafe, DmarcPass == true),
+      RecentTotal = sum(MessageCountSafe),
+      SampleHeaderFrom = anyif(HeaderFrom, isnotempty(HeaderFrom))
       by Domain
   | where RecentTotal >= 10
   | extend RecentPassRate = round(100.0 * RecentPass / RecentTotal, 1);
@@ -42,11 +44,15 @@ query: |
   | where RecentPassRate < BaselinePassRate - 15
   | where RecentPassRate < 90
   | extend PassRateDrop = round(BaselinePassRate - RecentPassRate, 1)
-  | project Domain, BaselinePassRate, RecentPassRate, PassRateDrop, RecentTotal
+  | project Domain, BaselinePassRate, RecentPassRate, PassRateDrop, RecentTotal, SampleHeaderFrom
 entityMappings:
   - entityType: DNS
     fieldMappings:
       - identifier: DomainName
         columnName: Domain
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: SampleHeaderFrom
 version: 1.1.0
 kind: Scheduled

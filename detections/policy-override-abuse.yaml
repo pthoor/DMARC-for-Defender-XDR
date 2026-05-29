@@ -18,6 +18,7 @@ tactics:
   - DefenseEvasion
 relevantTechniques:
   - T1562
+  - T1001
 query: |
   DMARCReports_CL
   | where TimeGenerated > ago(6h)
@@ -27,16 +28,27 @@ query: |
   | summarize
       OverriddenMessages = sum(MessageCountSafe),
       Domains = make_set(Domain, 10),
+      HeaderFroms = make_set_if(HeaderFrom, isnotempty(HeaderFrom), 10),
+      SampleDomain = anyif(Domain, isnotempty(Domain)),
+      SampleHeaderFrom = anyif(HeaderFrom, isnotempty(HeaderFrom)),
       SampleIP = anyif(SourceIP, isnotempty(SourceIP)),
       SourceIPs = make_set_if(SourceIP, isnotempty(SourceIP), 10),
       ReasonComments = make_set(PolicyEvaluated_reason_comment, 5)
       by PolicyEvaluated_reason_type
-  | where OverriddenMessages >= 5
+  | where OverriddenMessages >= 50
   | where isnotempty(SampleIP)
 entityMappings:
   - entityType: IP
     fieldMappings:
       - identifier: Address
         columnName: SampleIP
+  - entityType: DNS
+    fieldMappings:
+      - identifier: DomainName
+        columnName: SampleDomain
+  - entityType: Account
+    fieldMappings:
+      - identifier: Name
+        columnName: SampleHeaderFrom
 version: 1.1.0
 kind: Scheduled

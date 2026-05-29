@@ -39,11 +39,21 @@ try {
     }
 
     if (-not $clientState) {
-        Write-Warning 'GRAPH_CLIENT_STATE is not configured — subscription will be created without clientState.'
+        Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+            StatusCode  = 500
+            Body        = (@{ error = "GRAPH_CLIENT_STATE is not configured. Every Graph subscription must have a clientState for authenticated notifications." } | ConvertTo-Json)
+            ContentType = 'application/json'
+        })
+        return
     }
-    elseif ($clientState -like '@Microsoft.KeyVault*') {
-        Write-Warning "GRAPH_CLIENT_STATE contains an unresolved Key Vault reference. The Function App's MI may not have 'Key Vault Secrets User' role yet, or the role hasn't propagated. Proceeding without clientState."
-        $clientState = $null
+
+    if ($clientState -like '@Microsoft.KeyVault*') {
+        Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+            StatusCode  = 500
+            Body        = (@{ error = "GRAPH_CLIENT_STATE contains an unresolved Key Vault reference. Ensure the Function App's Managed Identity has been granted 'Key Vault Secrets User' on the vault and that role propagation is complete before calling SetupHelper." } | ConvertTo-Json)
+            ContentType = 'application/json'
+        })
+        return
     }
 
     Write-Information "Creating Graph subscription for user $mailboxUserId"
