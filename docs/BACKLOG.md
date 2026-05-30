@@ -1,17 +1,44 @@
-# DMARC Analyzer Azure — Improvement Backlog
+# DMARC Analyzer Azure Public Backlog
 
-Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prioritization scratchpad — mark items with **PICK** / **DEFER** / **WONT** and re-order as needed.
+Maintainer-facing planning for upcoming hardening, detection tuning, and product improvements. This file is safe to keep in the public repo because it explains direction and tradeoffs for contributors, but it should stay curated: move accepted work to GitHub issues when it is ready for implementation, and do not use this file for undisclosed security vulnerabilities.
+
+If you find a security issue that is not already public, follow [SECURITY.md](../SECURITY.md) instead of opening a public backlog item.
+
+Originally captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prioritization scratchpad — mark items with **PICK** / **DEFER** / **WONT** and re-order as needed.
 
 **Legend**
 - **Severity:** P0 (correctness/security blocker) · P1 (high-value gap) · P2 (quality / hardening) · P3 (strategic / deferred)
 - **Effort:** S (<½ day) · M (½–2 days) · L (>2 days)
 - **Status:** ☐ open · ☑ done · ⏸ deferred
 
-**Locked decisions (do not relitigate)**
+**How an AI coding agent should use this backlog**
+- Start on a new branch, never directly on `main`. Use a focused name such as `work/a10-dmarcpass-workbook` or `fix/g6-appinsights-api`.
+- Read [README.md](../README.md), [docs/ARCHITECTURE.md](ARCHITECTURE.md), [docs/RUNBOOK.md](RUNBOOK.md), [tests/README.md](../tests/README.md), and the specific files listed in the selected backlog item before editing.
+- Pick one open item at a time. Prefer the recommended next slice unless the maintainer asks for a different item: A10, A11, B3, D9, then C0 (which enables D2/D3/D4).
+- Treat `Where`, `Problem`, and `Fix` as the task contract. If implementation reality differs from the backlog, update the backlog or explain the mismatch in the PR.
+- Keep changes scoped. Do not combine unrelated backlog items in one branch unless one item cannot be completed safely without the other.
+- Add or update tests when touching parser logic, KQL generation/parity, Bicep resources, scripts, or detection behavior. For docs-only changes, validate links and Markdown.
+- Use existing project patterns: PowerShell Functions under [src/function](../src/function), shared helpers in [src/function/modules/DmarcHelpers.psm1](../src/function/modules/DmarcHelpers.psm1), infrastructure in [infra/main.bicep](../infra/main.bicep), alerts in [infra/alerts.bicep](../infra/alerts.bicep), detections in [detections](../detections), and workbook KQL in [workbook/dmarc-workbook.json](../workbook/dmarc-workbook.json).
+- Before marking an item done, verify the relevant tests or static checks, update docs if behavior changes, and record any remaining caveats in the item status note.
+
+**Definition of done for backlog items**
+- Code, infrastructure, workbook, detections, docs, and tests are updated for the full user-facing behavior described by the item.
+- The change works for a single-tenant Exchange Online deployment and does not introduce RUF/message-content processing.
+- KQL remains backward-compatible with older custom table rows when the item touches schema or workbook queries.
+- Public docs do not expose secrets, tenant-specific values, or undisclosed vulnerabilities.
+- The final PR description names the backlog item ID and lists validation performed.
+
+**Locked decisions**
 - Single-tenant only — one Function App per M365 tenant
 - RUF (forensic) reports stay off; document the privacy stance more prominently
 - Private Endpoints deferred (separate GitHub issue) — but call out resources where PE is the only mitigation
-- Migration to Defender XDR Advanced Hunting graph functions is the long-term query target — blocked on Sentinel Data Lake
+- Defender XDR is the target surface: onboarding the Sentinel workspace to the unified Defender portal makes `DMARCReports_CL` huntable today (Z1a, no data lake needed); only Advanced Hunting **graph functions** + data-lake specifics stay long-term (Z1b)
+- **Transport security (MTA-STS, DANE, TLS-RPT) and brand display (BIMI) are out of scope** — they are a different security domain (confidentiality-in-transit / brand) with a different owner (messaging/marketing admins) than DMARC anti-spoofing, they are not SOC-actionable in the Defender XDR incident workflow, and mature tooling already covers them. See "Out of scope — transport security & brand display." Only DNS checks that explain DMARC pass/fail (SPF lookups, DKIM key strength, DMARC record validity) stay in.
+
+**Planning reset — 2026-05-30 (scope narrowed 2026-05-30)**
+- Keep the product centered on Exchange Online-hosted DMARC operations and Defender XDR/Sentinel-style analytics. Avoid turning it into a generic email-security platform.
+- Live-DNS work is in scope only when it explains a DMARC authentication outcome (why SPF/DKIM/DMARC pass or fail). It is **not** in scope for transport-security or brand-display posture.
+- Recommended next slice is now: close stale P0/P1 correctness gaps (A10, A11), add suppressions (B3), add domain inventory (D9), then build the minimal posture collector (C0) that enables the DMARC-auth DNS checks (D2 SPF lookups, D3 DMARC record validity, D4 DKIM key strength).
 
 ---
 
@@ -59,21 +86,33 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 - **Problem:** Soft delete only — a compromised admin can permanently destroy `graph-client-state`.
 - **Fix:** One-line change. Note: cannot be disabled once enabled (intentional).
 
-### A8. Bump archived App Insights API version
-- **Effort:** S · **Status:** ☐
-- **Where:** [infra/main.bicep:289](../infra/main.bicep#L289)
-- **Problem:** `2020-02-02` is archived.
-- **Fix:** Move to `2020-11-01-preview` (or current GA).
-
 ### A9. Capture per-record alignment outcome
-- **Effort:** S · **Status:** ☑ (Aligned_dkim / Aligned_spf / DmarcPass materialized at ingestion; detection rules updated to use DmarcPass directly)
-- **Where:** [src/function/modules/DmarcHelpers.psm1:572-635](../src/function/modules/DmarcHelpers.psm1#L572-L635)
-- **Problem:** Schema stores `PolicyPublished_adkim`/`aspf` (the policy *mode*) but not the per-record alignment *outcome*. RFC 7489 DMARC pass = `(DKIM auth pass AND DKIM aligned) OR (SPF auth pass AND SPF aligned)`. Today every consumer has to reimplement alignment logic.
-- **Fix:** Compute and store `Aligned_dkim` / `Aligned_spf` (bool) and a single `DmarcPass` (bool) at ingestion. Update KQL in workbook + detections to use `DmarcPass` directly.
+- **Effort:** S · **Status:** ☑ done-with-caveat (materialized at ingestion; see implementation note below)
+- **Where:** [src/function/modules/DmarcHelpers.psm1:711-713](../src/function/modules/DmarcHelpers.psm1#L711-L713)
+- **Problem:** Schema stores `PolicyPublished_adkim`/`aspf` (the policy *mode*) but not a single materialized per-record DMARC outcome, so every consumer reimplements the pass expression.
+- **Fix (as shipped):** Materialize `Aligned_dkim` / `Aligned_spf` / `DmarcPass` (bool) at ingestion. **Implementation note — the value is derived from the receiver's `policy_evaluated` verdict, not recomputed from `auth_results`:** `DmarcPass = (policy_evaluated.dkim == 'pass') OR (policy_evaluated.spf == 'pass')`. `policy_evaluated/dkim|spf` already fold authentication **and** alignment into one result, so the `Aligned_*` column names are slightly loose (they mean "authenticated and aligned per the receiver," not pure alignment). This buys schema stability and query simplicity, but `DmarcPass` is **identical by construction** to the A10 `DmarcPassEffective` fallback — it is not an independent signal.
+- **Optional follow-up (P2, new):** To gain a signal the fallback can't reproduce, recompute alignment from `auth_results` (DKIM `d=` / SPF `mfrom` domain) against the published `adkim`/`aspf` modes. This surfaces receiver **local-policy overrides** (`forwarded`, `mailing_list`, `trusted_forwarder`) where the message was delivered despite failing raw DMARC — the only case where a recomputed value diverges from `policy_evaluated`. Store as a separate column (e.g. `DmarcPassRecomputed`) rather than overwriting `DmarcPass`.
+
+### A10. Normalize workbook and Azure Monitor alerts to `DmarcPassEffective`
+- **Effort:** M · **Status:** ☐
+- **Where:** [workbook/dmarc-workbook.json](../workbook/dmarc-workbook.json), [infra/alerts.bicep](../infra/alerts.bicep)
+- **Problem:** Ingestion and detections now use `DmarcPass`, but many workbook tiles and the pass-rate alert still recompute pass/fail inline from `PolicyEvaluated_dkim` / `PolicyEvaluated_spf`. Because `DmarcPass` is derived from those same fields (see A9), the issue is **inconsistent/duplicated expressions across tiles**, not a true semantic divergence — but inconsistency still produces subtly different numbers when one tile forgets a null guard or weighting. README migration guidance already recommends `DmarcPassEffective` for historical fallback.
+- **Note on semantics:** The `DmarcPass`/`DmarcPassEffective` (receiver DMARC verdict) view and the raw `auth_results` SPF/DKIM tiles are **both valid and intentionally different** (overall DMARC outcome vs protocol-specific result). This item normalizes the *DMARC-verdict* tiles only; it must **not** collapse the raw-result tiles into it.
+- **Fix:** Introduce one shared KQL pattern in DMARC-verdict workbook tiles and alert queries:
+	`DmarcPassEffective = coalesce(tobool(column_ifexists('DmarcPass', bool(null))), PolicyEvaluated_dkim =~ 'pass' or PolicyEvaluated_spf =~ 'pass')`.
+	Use it for pass-rate, fail-rate, readiness, map, source, and alert calculations. **Weight all pass/fail aggregations by `sum(MessageCount)`, never by row count** — each report row represents `count` messages. Keep raw SPF/DKIM result tiles where they intentionally show protocol-specific results.
+
+### A11. Complete Easy Auth cutover for admin HTTP functions
+- **Effort:** S · **Status:** ☐
+- **Where:** [src/function/BackfillProcessor/function.json](../src/function/BackfillProcessor/function.json), [src/function/SetupHelper/function.json](../src/function/SetupHelper/function.json), [infra/main.bicep](../infra/main.bicep)
+- **Problem:** `authsettingsV2` exists, but both admin endpoints still use `authLevel: admin`. This is acceptable during bootstrap validation, but the backlog currently marks A4 done and can hide the remaining operational cutover.
+- **Fix:** After validating Easy Auth in a deployed tenant, change both HTTP triggers to `authLevel: anonymous`, document the token acquisition/call pattern, and add a deployment validation check that rejects anonymous access without Entra auth.
 
 ---
 
 ## P1 — DMARC correctness & detection tuning
+
+> **Two alerting surfaces — keep them straight.** The project's stated main goal is to *alert in Defender XDR*. The `detections/*.yaml` (Sentinel scheduled analytics rules; convertible to XDR Custom Detections — see Z1a) raise **incidents in the unified Defender XDR queue** and are the **primary** surface for that goal; entity-mapping/threshold work (B1, B2, B5) compounds here. The `infra/alerts.bicep` rules are `Microsoft.Insights/scheduledQueryRules` (Azure Monitor) that fire to **Action Groups (email/SMS/webhook) only — they do not appear in the XDR incident queue**, so treat them as an ops/notification channel, not as "Defender XDR alerting." Prioritize detection-rule coverage over expanding the Azure Monitor alert set when the goal is XDR.
 
 ### B1. `policy-override-abuse` threshold + entity mappings
 - **Effort:** S · **Status:** ☑ (threshold raised to >=50; DNS + Account entity mappings added)
@@ -106,23 +145,27 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 
 ---
 
-## P1 — Adjacent email-auth protocols (verified 2026-05 as supported by EXO)
+## P1 — DMARC-auth DNS posture (explains pass/fail)
 
-### C1. TLS-RPT report ingestion
-- **Effort:** M · **Status:** ☐
-- **Why:** TLS-RPT (RFC 8460) reports arrive in a mailbox via email — same delivery mechanism as DMARC RUA. Microsoft sends them. Reuses the existing pipeline (Exchange mailbox → Graph notification → Function → Log Analytics) almost as-is.
-- **Fix:** Add a `TLSReports_CL` table + DCR + parser in [DmarcHelpers.psm1](../src/function/modules/DmarcHelpers.psm1) (or a sibling module). Add a workbook tab.
-- **Caveat:** Microsoft sends only to the first `rua` endpoint — single mailbox is fine for this design.
+These items resolve live DNS **only to explain a DMARC authentication outcome** — why SPF/DKIM/DMARC pass or fail for in-scope domains. None of this data is in the report (RFC 7489 RUA carries only `policy_published` + per-record source IP/count/disposition/SPF-DKIM results/identifiers), and **workbook/KQL cannot resolve DNS** — hence the collector below. The actual checks live in D2 (SPF lookups), D3 (DMARC record validity), and D4 (DKIM key strength).
 
-### C2. MTA-STS posture monitoring
-- **Effort:** S · **Status:** ☐
-- **Why:** EXO enforces remote MTA-STS policies on outbound mail (always-on) and supports tenant-side publishing. We should monitor whether *our* domains have valid published policies.
-- **Fix:** A small script + workbook tile that resolves `_mta-sts.<domain>` and `mta-sts.<domain>/.well-known/mta-sts.txt` for each domain in scope and surfaces policy mode/version/staleness.
+### C0. Minimal domain posture collector (foundational — enables D2/D3/D4)
+- **Effort:** M · **Status:** ☐ PICK before D2/D3/D4
+- **Problem:** D2/D3/D4 assume a "workbook tile that resolves `_dmarc`/SPF/selector TXT." **Workbook/KQL cannot perform DNS resolution**, and the repo has no DNS code today. Without a collector these checks are unbuildable.
+- **Fix:** Add a timer-triggered PowerShell Function (e.g. `DomainPostureCollector`) that, for each in-scope domain (from `DomainInventory_CL`, D9), runs `Resolve-DnsName` for the DMARC-authentication records only — `_dmarc.<domain>` TXT, the SPF record (recursively, to count lookups), and `<selector>._domainkey.<domain>` TXT for selectors seen in reports — and writes a `DomainPosture_CL` table (`Domain`, `CheckType`, `RecordRaw`, `ParsedFields`, `Status`, `CheckedAt`). Workbook tiles read this table only. Prefer a sibling module over expanding `DmarcHelpers.psm1`.
+- **Scope guard:** Keep this collector to DMARC-authentication records. It is deliberately **not** a transport-security/HTTPS prober (no MTA-STS `.well-known` fetch, no TLSA/DNSSEC) — see the out-of-scope decision below.
 
-### C3. BIMI eligibility check (NOT display)
-- **Effort:** S · **Status:** ☐
-- **Why:** Outlook/M365 don't GA-render BIMI yet (April 2026 status: limited rollout, no GA date). But Gmail/Yahoo/Apple/Fastmail do, and BIMI eligibility (`p=quarantine`/`reject` + `pct=100`) is a useful proxy for DMARC enforcement health.
-- **Fix:** A workbook tile per domain showing eligibility status; defer VMC/SVG validation until Microsoft renders BIMI.
+---
+
+## Out of scope — transport security & brand display (decided 2026-05-30)
+
+> **WONT (by design).** MTA-STS, DNSSEC/DANE, TLS-RPT, and BIMI are **not** built into this tool. They protect a *different* security property (encryption-in-transit / brand display) than DMARC (anti-spoofing), they serve a *different* owner (messaging/marketing admins, not the SOC), and **nothing about them is actionable in a Defender XDR DMARC incident** — they are posture, not detection. They also have no presence in the DMARC report and would require either a separate report pipeline (TLS-RPT) or a full DNS/HTTPS-probing subsystem, duplicating mature tooling.
+>
+> **Use instead:** Exchange Admin Center "messages in transit" / outbound transit-security report; the [Microsoft Remote Connectivity Analyzer](https://testconnectivity.microsoft.com/tests/o365); and free domain scanners (internet.nl, Hardenize, MECSA) for MTA-STS/DANE/TLS-RPT. BIMI display is an external-receiver concern (Gmail/Apple/Yahoo); Microsoft 365/Outlook does not render BIMI.
+>
+> **Note:** "Am I ready for BIMI / full enforcement" (`p=quarantine`/`reject`, `pct=100`) is *already* answered from ingested `PolicyPublished_*` data by [docs/POLICY_PROGRESSION_PLAYBOOK.md](POLICY_PROGRESSION_PLAYBOOK.md) and the "Domain Readiness for Policy Enforcement" workbook tile — no new code needed.
+>
+> Reopen only if the product intentionally pivots from "DMARC SOC tooling" to "domain email-security posture dashboard." Previously tracked here as C1 (TLS-RPT), C2 (MTA-STS), C3 (BIMI), C4 (DANE).
 
 ---
 
@@ -134,19 +177,22 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 - **Fix:** Add `ASN` + `ASNOrg` columns at ingestion (resolve via a periodic enrichment job using a static IP→ASN dataset, or external API at query time). Threat-feed correlation can come later via a separate `ThreatIntel_CL`/MISP join.
 
 ### D2. SPF lookup-count exhaustion warning
-- **Effort:** S · **Status:** ☐
+- **Effort:** S · **Status:** ☐ (depends on C0)
+- **Data provenance:** Not in the DMARC XML — requires recursively resolving the SPF record. Do it in the **C0 collector** (count `include`/`a`/`mx`/`ptr`/`exists` DNS lookups), write to `DomainPosture_CL`; the workbook only reads it.
 - **Problem:** No early warning when an SPF record is approaching the 10-lookup limit (`permerror`).
-- **Fix:** Periodic SPF record health check tile in the workbook + an alert rule.
+- **Fix:** C0 computes the resolved lookup count per domain; add a workbook tile + alert rule that flag domains at ≥8 lookups.
 
 ### D3. DMARC record syntax validator
-- **Effort:** S · **Status:** ☐
+- **Effort:** S · **Status:** ☐ (depends on C0)
+- **Data provenance:** Not in the DMARC XML (the report only echoes `policy_published`, not the literal TXT). Resolve `_dmarc.<domain>` TXT in the **C0 collector**.
 - **Problem:** No surface-area for syntactically-broken records (missing RUA, malformed `pct`, dangling `sp`, deprecated `fo`).
-- **Fix:** A workbook tile per domain that resolves the `_dmarc.<domain>` TXT and validates structure.
+- **Fix:** C0 resolves and validates the `_dmarc.<domain>` TXT structure; the workbook renders a per-domain validity tile from `DomainPosture_CL`. **Note:** a workbook/KQL tile cannot resolve DNS itself.
 
 ### D4. DKIM key aging / algorithm-downgrade alerts
-- **Effort:** S · **Status:** ☐
-- **Where:** workbook lines ~1596–1641 already track first/last seen per selector
-- **Fix:** Add an alert rule for selectors not rotated in N days; flag RSA-1024 and weak algorithms.
+- **Effort:** S · **Status:** ☐ (key-size/algorithm checks depend on C0)
+- **Where:** workbook lines ~1596–1641 already track first/last seen per selector (from report data)
+- **Fix:** Add an alert rule for selectors not rotated in N days (derivable from existing first/last-seen data). For key strength, resolve the selector's `<selector>._domainkey.<domain>` TXT in the **C0 collector** and flag RSA-1024 and weak algorithms.
+- **EXO-specific:** Exchange Online provisions DKIM selectors (`selector1`/`selector2`) as **RSA-1024 by default**. Flag in-scope EXO domains still on 1024-bit and recommend rotation to 2048 via `Rotate-DkimSigningConfig -Identity <domain> -KeySize 2048` (selector1/selector2 alternation, ~96h to take effect). See https://learn.microsoft.com/defender-office-365/email-authentication-dkim-configure#rotate-dkim-keys.
 
 ### D5. Cousin-domain / lookalike monitoring
 - **Effort:** L · **Status:** ☐
@@ -165,12 +211,12 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 ### D8. Curated sender classification catalog (`ProviderIPs_CL`)
 - **Effort:** M · **Status:** ☐
 - **Problem:** The "Source IP Classification by Provider" workbook tile uses an inline `case` statement covering a handful of providers. Commercial DMARC vendors' central differentiator is a maintained corpus that classifies senders as `Own infrastructure` / `ESP` / `Marketing` / `Forwarder` / `Threat` / `Unknown` for tens of thousands of sending services — analysts immediately know whether a failing source is "Mailchimp legitimately" or "random VPS." Triage time without this is materially worse.
-- **Fix:** Externalize to a `ProviderIPs_CL` Log Analytics table seeded from community-maintained mappings (e.g., publicly-published ESP IP ranges, known forwarder ASN lists) plus our own additions. Schema: `(IPPrefix, ASN, OrgName, Category, Confidence, Source, LastUpdated)`. Workbook + detections join against it. Doubles as Z1 prep — promote out of Z1 since it's valuable standalone.
+- **Fix:** Externalize to a `ProviderIPs_CL` Log Analytics table seeded from community-maintained mappings (e.g., publicly-published ESP IP ranges, known forwarder ASN lists) plus our own additions. Schema: `(IPPrefix, ASN, OrgName, Category, Confidence, Source, LastUpdated)`. Workbook + detections join against it. Doubles as Z1b prep — promote out of Z1b since it's valuable standalone.
 
 ### D9. Domain inventory + subdomain auto-discovery (`DomainInventory_CL`)
 - **Effort:** S · **Status:** ☐
 - **Problem:** We group by `Domain` from incoming reports but don't track "domains expected in scope" vs "domains actually seen." Subdomain spoofing (e.g., `newsletter.corp.example.com` when only `corp.example.com` is monitored) goes unnoticed, and unexpected new domains in reports aren't surfaced.
-- **Fix:** Add a `DomainInventory_CL` lookup table populated at deploy time (or via a small admin endpoint) with `(BaseDomain, OwnerTeam, ExpectedSubdomains, AddedAt)`. Workbook tile: "Unexpected domains in reports last 30d." Also derive `BaseDomain` and `IsSubdomain` columns at ingestion (overlaps with Z1 prep — same change).
+- **Fix:** Add a `DomainInventory_CL` lookup table populated at deploy time (or via a small admin endpoint) with `(BaseDomain, OwnerTeam, ExpectedSubdomains, AddedAt)`. Workbook tile: "Unexpected domains in reports last 30d." Also derive `BaseDomain` and `IsSubdomain` columns at ingestion (overlaps with Z1b prep — same change).
 
 ### D10. Stakeholder email digest (scheduled push)
 - **Effort:** S · **Status:** ☐
@@ -182,10 +228,10 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 ## P1 — Test coverage gaps
 
 ### E1. Transient API failure tests
-- **Effort:** M · **Status:** ☐
+- **Effort:** M · **Status:** ☐ partial
 - **Where:** [tests/DmarcHelpers.Tests.ps1](../tests/DmarcHelpers.Tests.ps1)
-- **Problem:** No test for Graph 429/503 retry, DCR throttling, expired token mid-batch, partial batch failure.
-- **Fix:** Add Pester scenarios mocking these.
+- **Problem:** Graph 429/503 retry tests exist, but there is still no coverage for DCR throttling, expired token mid-batch, or partial Log Analytics batch failure.
+- **Fix:** Add Pester scenarios mocking DCR 429/503, expired managed identity token during send, and multi-batch partial failure that must not mark the message read.
 
 ### E2. Subscription renewal race
 - **Effort:** S · **Status:** ☐
@@ -268,6 +314,12 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 - **Where:** [infra/main.bicep:21](../infra/main.bicep#L21)
 - **Fix:** `@minLength`/`@maxLength` + comment on accepted format.
 
+### G6. Bump archived App Insights API version (moved from A8)
+- **Effort:** S · **Status:** ☐
+- **Where:** [infra/main.bicep:289](../infra/main.bicep#L289)
+- **Problem:** `2020-02-02` is archived. **This is hygiene, not a correctness/security blocker** — the archived version still deploys and functions, so it was demoted from P0 to P2.
+- **Fix:** Move to `2020-11-01-preview` (or current GA).
+
 ---
 
 ## P2 — Open-source readiness
@@ -292,10 +344,20 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 
 ## P3 — Strategic / deferred (do NOT pick now)
 
-### Z1. Defender XDR Advanced Hunting graph migration
-- **Status:** ⏸ Blocked on Sentinel Data Lake provisioning.
-- **Reference:** https://learn.microsoft.com/en-us/defender-xdr/advanced-hunting-graph
-- **When unblocked, prep work:** most schema-shape prep is now tracked as standalone P1 items — D1 (`ASN`, `IPReputation`), D8 (`ProviderIPs_CL`), D9 (`BaseDomain`, `IsSubdomain`), B4 (`OverrideReasonCategory`). Remaining Z1-specific work: edge metadata (`FirstSeen`/`LastSeen` per IP×Domain pair) and graph-function rewrites of the KQL.
+### Z1a. Surface DMARC telemetry natively in the unified Defender portal (NOT blocked — promote)
+- **Effort:** M · **Status:** ☐ PICK — directly serves the "alert/visualize in Defender XDR" goal
+- **Correction:** The previous "blocked on Sentinel Data Lake" framing was stale. Microsoft Sentinel is **GA in the unified Microsoft Defender portal** (with or without Defender XDR / E5), and a custom `_CL` table from an onboarded workspace is **queryable in unified Advanced Hunting today** — `DMARCReports_CL` appears under the Schema tab "organized by solution." This needs no data lake.
+- **Fix:**
+	1. Document onboarding the Sentinel workspace to the Defender portal so analysts hunt `DMARCReports_CL` in Advanced Hunting alongside XDR tables.
+	2. Convert the `detections/*.yaml` Sentinel analytics rules into **Defender XDR Custom Detection rules** (Microsoft's recommended path for new rules across Sentinel + XDR), preserving the existing IP/DNS/Account entity mappings.
+- **Caveat:** Near-real-time (NRT) frequency is **not** available for Custom Detections that include Microsoft Sentinel (`_CL`) data — keep scheduled frequencies. Custom functions saved in Sentinel aren't usable in Custom Detections.
+- **References:** https://learn.microsoft.com/azure/sentinel/microsoft-sentinel-defender-portal · https://learn.microsoft.com/defender-xdr/advanced-hunting-microsoft-defender · https://learn.microsoft.com/azure/sentinel/microsoft-365-defender-sentinel-integration
+- **Migration driver:** Microsoft Sentinel in the **Azure portal retires 2027-03-31** — the Defender portal becomes the only surface, so this work is on the critical path regardless.
+
+### Z1b. Advanced Hunting graph functions + Sentinel data lake (still deferred)
+- **Status:** ⏸ Deferred — newer/limited capabilities distinct from Z1a.
+- **Reference:** https://learn.microsoft.com/defender-xdr/advanced-hunting-graph
+- **Prep work:** most schema-shape prep is tracked as standalone P1 items — D1 (`ASN`, `IPReputation`), D8 (`ProviderIPs_CL`), D9 (`BaseDomain`, `IsSubdomain`), B4 (`OverrideReasonCategory`). Remaining graph-specific work: edge metadata (`FirstSeen`/`LastSeen` per IP×Domain pair) and graph-function rewrites of the KQL. Note: after onboarding to the Sentinel **data lake**, auxiliary log tables move to data-lake KQL exploration rather than standard Advanced Hunting.
 
 ### Z2. Private Endpoints
 - **Status:** ⏸ Tracked in separate GitHub issue.
@@ -311,4 +373,4 @@ Captured from a code/infra/workbook/ops audit on 2026-05-10. Use this as a prior
 
 ## Suggested first slice (1 week)
 
-If pressed for an initial cut, I'd take **A1, A3, A4, A5, A6, A7, A8, A9, B1, B2, F2, F3** — that closes the data-integrity holes, hardens the admin surface, and gives you operational visibility. Roughly 5–6 days of focused work.
+If pressed for an initial cut, I'd take **A1, A3, A4, A5, A6, A7, A9, B1, B2, F2, F3** — that closes the data-integrity holes, hardens the admin surface, and gives you operational visibility. Roughly 5–6 days of focused work. (A8 is now P2 hygiene, below.)

@@ -72,7 +72,14 @@ Describe 'New-GraphSubscription.ps1' {
 
         It 'Should invoke SetupHelper function endpoint' {
             $content = Get-Content $scriptPath -Raw
-            $content | Should -Match 'api/SetupHelper\?code='
+            $content | Should -Match 'api/SetupHelper'
+        }
+
+        It 'Should pass master key as x-functions-key header, not query parameter' {
+            $content = Get-Content $scriptPath -Raw
+            # Key must be sent as a header to keep it out of shell history and server logs
+            $content | Should -Match "x-functions-key"
+            $content | Should -Not -Match 'api/SetupHelper\?code='
         }
 
         It 'Should use hostname from ARM (not hardcoded)' {

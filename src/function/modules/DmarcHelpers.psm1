@@ -179,7 +179,7 @@ function Get-MailMessage {
         [string]$Token
     )
 
-    $uri = "https://graph.microsoft.com/v1.0/users/$UserId/messages/$MessageId"
+    $uri = "https://graph.microsoft.com/v1.0/users/$UserId/messages/$([System.Uri]::EscapeDataString($MessageId))"
     $message = Invoke-GraphRequest -Uri $uri -Token $Token
 
     # Fetch attachments
@@ -208,7 +208,7 @@ function Set-MessageRead {
         [string]$Token
     )
 
-    $uri = "https://graph.microsoft.com/v1.0/users/$UserId/messages/$MessageId"
+    $uri = "https://graph.microsoft.com/v1.0/users/$UserId/messages/$([System.Uri]::EscapeDataString($MessageId))"
     $null = Invoke-GraphRequest -Uri $uri -Method PATCH -Body @{ isRead = $true } -Token $Token
 }
 

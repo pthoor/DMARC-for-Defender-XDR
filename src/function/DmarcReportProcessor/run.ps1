@@ -66,7 +66,7 @@ try {
         if (-not $receivedClientState -and $resourceData) {
             $receivedClientState = $resourceData.clientState
         }
-        if ($receivedClientState -ne $expectedClientState) {
+        if ($receivedClientState -cne $expectedClientState) {
             Write-Error "Client state mismatch. The received client state does not match the expected value."
             return
         }

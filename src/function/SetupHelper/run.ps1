@@ -26,6 +26,30 @@ try {
         return
     }
 
+    # Validate that notificationUrl is a well-formed URL with an accepted scheme.
+    # Graph subscriptions delivered via Event Grid use the "EventGrid:" scheme;
+    # direct webhook subscriptions use "https". Both are valid here.
+    # Prevents an admin caller from registering an arbitrary non-approved endpoint.
+    try {
+        $parsedUri = [System.Uri]::new([string]$body.notificationUrl)
+        if ($parsedUri.Scheme -ne 'https' -and $parsedUri.Scheme -ne 'eventgrid') {
+            Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+                StatusCode  = 400
+                Body        = (@{ error = 'notificationUrl must use the HTTPS or EventGrid scheme.' } | ConvertTo-Json)
+                ContentType = 'application/json'
+            })
+            return
+        }
+    }
+    catch {
+        Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+            StatusCode  = 400
+            Body        = (@{ error = 'notificationUrl is not a valid URL.' } | ConvertTo-Json)
+            ContentType = 'application/json'
+        })
+        return
+    }
+
     $mailboxUserId = $env:MAILBOX_USER_ID
     $clientState   = $env:GRAPH_CLIENT_STATE
 
@@ -85,7 +109,7 @@ catch {
     Write-Error "SetupHelper failed: $_"
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode  = 500
-        Body        = (@{ error = $_.Exception.Message } | ConvertTo-Json)
+        Body        = (@{ error = 'An internal error occurred. Check the function logs for details.' } | ConvertTo-Json)
         ContentType = 'application/json'
     })
 }
