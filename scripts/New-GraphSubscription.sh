@@ -113,7 +113,9 @@ EXPIRATION=$(date -u -d "+2916 minutes" '+%Y-%m-%dT%H:%M:%S.0000000Z' 2>/dev/nul
 echo "  Partner topic: $PARTNER_TOPIC"
 echo "  Expiration: $EXPIRATION"
 
-SETUP_URI="https://$DEFAULT_HOSTNAME/api/SetupHelper?code=$MASTER_KEY"
+# Pass the master key as a request header — never as a query parameter — to keep it
+# out of shell history, process listings, server access logs, and exception messages.
+SETUP_URI="https://$DEFAULT_HOSTNAME/api/SetupHelper"
 SETUP_BODY=$(jq -n \
     --arg url "$NOTIFICATION_URL" \
     --arg exp "$EXPIRATION" \
@@ -126,6 +128,7 @@ for attempt in $(seq 1 $MAX_ATTEMPTS); do
     echo "  Calling SetupHelper (attempt $attempt/$MAX_ATTEMPTS)..."
     RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$SETUP_URI" \
         -H "Content-Type: application/json" \
+        -H "x-functions-key: $MASTER_KEY" \
         -d "$SETUP_BODY" \
         --max-time 120 2>/dev/null) || true
 

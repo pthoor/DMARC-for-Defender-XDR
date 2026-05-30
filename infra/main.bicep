@@ -61,7 +61,26 @@ param alertActionGroupId string = ''
 @description('Deployment timestamp for partner authorization expiration. Do not set manually.')
 param deploymentTime string = utcNow()
 
-@description('Client ID of the Entra ID app registration whose bearers may call the admin HTTP functions (BackfillProcessor, SetupHelper). When set, Easy Auth is enabled on the Function App. After confirming Easy Auth is working, change authLevel in BackfillProcessor/function.json and SetupHelper/function.json from "admin" to "anonymous".')
+@description('''Allow shared key (account key) access to the storage account.
+
+Set to false (default) for production deployments that use CI/CD pipelines or the Azure Portal to publish the function app — Managed Identity is used for all runtime storage access.
+
+Set to true only when using the Azure Functions Core Tools CLI (func azure functionapp publish) locally, which requires shared key access to upload the deployment package. Disable again after the initial publish if possible.
+''')
+param allowStorageSharedKeyAccess bool = false
+
+@description('''Block external access to the SCM (Kudu) management endpoint.
+
+When true (default): all access to https://{app}.scm.azurewebsites.net is denied. This is the recommended setting for production. Flex Consumption deployments use blob storage and do not need Kudu. Application logs are available through Application Insights.
+
+When false: the SCM endpoint is publicly reachable. Use only in non-production environments for debugging.
+''')
+param restrictScmAccess bool = true
+
+@description('''Client ID of the Entra ID app registration whose bearers may call the admin HTTP functions (BackfillProcessor, SetupHelper). When set, Easy Auth is enabled on the Function App and callers must present a valid Entra ID bearer token.
+
+IMPORTANT: Keep authLevel set to "admin" in BackfillProcessor/function.json and SetupHelper/function.json even after enabling Easy Auth. This provides defense-in-depth: if Easy Auth is ever misconfigured or removed, the function-level master key remains as a second layer of protection. Do NOT change authLevel to "anonymous".
+''')
 param adminEntraAppClientId string = ''
 
 // ── Variables ──
@@ -272,11 +291,12 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     allowBlobPublicAccess: false
     minimumTlsVersion: 'TLS1_2'
     defaultToOAuthAuthentication: true
-    // allowSharedKeyAccess must remain true (default) because the Azure Functions
-    // Core Tools CLI (func azure functionapp publish) needs shared key access to
-    // generate SAS tokens for uploading the deployment package to blob storage.
-    // The Function App runtime itself uses Managed Identity (see functionAppConfig
-    // deployment.storage.authentication), but the local CLI tooling cannot use MI.
+    // The Function App runtime uses Managed Identity for all storage access
+    // (see functionAppConfig deployment.storage.authentication).
+    // Set allowStorageSharedKeyAccess=true only when publishing via the local
+    // Azure Functions Core Tools CLI, which needs shared key access to upload
+    // the deployment package. For CI/CD deployments this should remain false.
+    allowSharedKeyAccess: allowStorageSharedKeyAccess
   }
 }
 
@@ -367,6 +387,10 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
     siteConfig: {
       ftpsState: 'Disabled'
       minTlsVersion: '1.2'
+      // Block the SCM (Kudu) management endpoint in production.
+      // Flex Consumption deployments use blob storage — Kudu is not required.
+      // Set restrictScmAccess=false only for non-production debugging.
+      scmIpSecurityRestrictionsDefaultAction: restrictScmAccess ? 'Deny' : 'Allow'
     }
     functionAppConfig: {
       deployment: {
@@ -480,8 +504,6 @@ resource storageTableDataContributor 'Microsoft.Authorization/roleAssignments@20
 // When adminEntraAppClientId is set, all HTTP requests to the Function App must carry
 // a valid Entra ID bearer token issued for that app. The Event Grid webhook path is
 // excluded so DMARC event delivery is not affected.
-// After confirming Easy Auth is working, change authLevel in
-// BackfillProcessor/function.json and SetupHelper/function.json from "admin" to "anonymous".
 
 resource functionAppAuthSettings 'Microsoft.Web/sites/config@2024-04-01' = if (!empty(adminEntraAppClientId)) {
   name: 'authsettingsV2'

@@ -132,7 +132,10 @@ $setupBody = @{
     expirationDateTime = $expirationDateTime
 } | ConvertTo-Json
 
-$setupUri = "https://$defaultHostName/api/SetupHelper?code=$masterKey"
+# Pass the master key as a request header — never as a query parameter — to keep it
+# out of shell history, process listings, server access logs, and exception messages.
+$setupUri = "https://$defaultHostName/api/SetupHelper"
+$setupHeaders = @{ 'x-functions-key' = $masterKey }
 
 # Invoke SetupHelper (retry for cold start)
 $graphSubscriptionId = $null
@@ -144,7 +147,7 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         # Use Invoke-WebRequest instead of Invoke-RestMethod so we can read
         # the response body on non-2xx status codes (SetupHelper returns
         # { error: "..." } on 400/500 which Invoke-RestMethod would discard).
-        $webResponse = Invoke-WebRequest -Uri $setupUri -Method POST -Body $setupBody `
+        $webResponse = Invoke-WebRequest -Uri $setupUri -Method POST -Headers $setupHeaders -Body $setupBody `
             -ContentType 'application/json' -TimeoutSec 120 -UseBasicParsing -ErrorAction Stop
         $response = $webResponse.Content | ConvertFrom-Json
 
