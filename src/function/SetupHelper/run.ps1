@@ -29,7 +29,7 @@ try {
     # Validate that notificationUrl is a well-formed URL with an accepted scheme.
     # Graph subscriptions delivered via Event Grid use the "EventGrid:" scheme;
     # direct webhook subscriptions use "https". Both are valid here.
-    # Prevents an admin caller from registering an arbitrary non-approved endpoint.
+    # This check only enforces allowed schemes; host allow-listing is not applied here.
     try {
         $parsedUri = [System.Uri]::new([string]$body.notificationUrl)
         if ($parsedUri.Scheme -ne 'https' -and $parsedUri.Scheme -ne 'eventgrid') {

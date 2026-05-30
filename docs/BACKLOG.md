@@ -102,11 +102,11 @@ Originally captured from a code/infra/workbook/ops audit on 2026-05-10. Use this
 	`DmarcPassEffective = coalesce(tobool(column_ifexists('DmarcPass', bool(null))), PolicyEvaluated_dkim =~ 'pass' or PolicyEvaluated_spf =~ 'pass')`.
 	Use it for pass-rate, fail-rate, readiness, map, source, and alert calculations. **Weight all pass/fail aggregations by `sum(MessageCount)`, never by row count** — each report row represents `count` messages. Keep raw SPF/DKIM result tiles where they intentionally show protocol-specific results.
 
-### A11. Complete Easy Auth cutover for admin HTTP functions
+### A11. Complete Easy Auth hardening for admin HTTP functions
 - **Effort:** S · **Status:** ☐
 - **Where:** [src/function/BackfillProcessor/function.json](../src/function/BackfillProcessor/function.json), [src/function/SetupHelper/function.json](../src/function/SetupHelper/function.json), [infra/main.bicep](../infra/main.bicep)
-- **Problem:** `authsettingsV2` exists, but both admin endpoints still use `authLevel: admin`. This is acceptable during bootstrap validation, but the backlog currently marks A4 done and can hide the remaining operational cutover.
-- **Fix:** After validating Easy Auth in a deployed tenant, change both HTTP triggers to `authLevel: anonymous`, document the token acquisition/call pattern, and add a deployment validation check that rejects anonymous access without Entra auth.
+- **Problem:** `authsettingsV2` can be configured, but operator guidance for ongoing validation is incomplete. The intended security model is defense-in-depth: keep both endpoints at `authLevel: admin` and require Entra bearer auth via Easy Auth.
+- **Fix:** Keep both HTTP triggers at `authLevel: admin` (do **not** switch to anonymous), document the required call pattern (Entra bearer token + function key), and add a deployment validation check that fails if Easy Auth is unset or either trigger is changed away from `admin`.
 
 ---
 
