@@ -14,7 +14,7 @@ was tested directly against a real deployment, not assumed from docs:
 | --- | --- |
 | `az functionapp deployment source config-zip --src <zip> --build-remote false` | ✅ **Verified working** - use this for manual/scripted CLI deploys. |
 | `az functionapp deploy --type zip` | ❌ **Verified broken** - returns `415 Unsupported Media Type` against this app. The command itself prints `"This command is in preview and under development"`; don't use it here until that's resolved upstream. |
-| `func azure functionapp publish <app> --powershell` (Azure Functions Core Tools) | Not independently verified in this repo, but it's Microsoft's long-standing, GA local-publish client (not the newer, still-preview `az functionapp deploy`), so it's the documented default below. If it fails the same way, fall back to the `config-zip` command above. |
+| `func azure functionapp publish <app> --powershell` (Azure Functions Core Tools) | Not independently verified in this repo. Use the verified `config-zip` command above for manual deployments. |
 | `Azure/functions-action@v1` (GitHub Action) | Not independently verified in this repo. Documented below as the default for CI since it's the official, GA action. If a run fails with a `415`-style error, replace the action step with a raw `az functionapp deployment source config-zip` step instead (same auth already set up via `azure/login`). |
 
 If you hit a `415` from any tool, don't debug the SCM/RBAC config first - switch to
@@ -45,33 +45,7 @@ never touches SCM - this only matters when you're pushing new code.
 Best if you deploy code by hand from your own machine once in a while and don't run
 CI for this project. SCM stays closed to the public internet at all other times.
 
-```bash
-# 1. Find your current public IP
-MY_IP=$(curl -s https://api.ipify.org)
-
-# 2. Open a scoped, temporary allow-rule on the SCM site only
-az webapp config access-restriction add \
-  --resource-group <rg> --name <function-app-name> \
-  --scm-site --rule-name "temp-manual-deploy" --action Allow \
-  --priority 100 --ip-address "$MY_IP/32"
-
-# 3. Deploy
-cd src/function
-func azure functionapp publish <function-app-name> --powershell
-
-# 3-alt. If step 3 fails (e.g. a 415/deployment error), this is the verified
-#        fallback - zip the folder yourself first, then:
-#   az functionapp deployment source config-zip \
-#     --resource-group <rg> --name <function-app-name> \
-#     --src <path-to-zip> --build-remote false
-# Do NOT use `az functionapp deploy --type zip` here - it returns 415 against
-# this app's Flex Consumption + PowerShell configuration (see table above).
-
-# 4. Close it again
-az webapp config access-restriction remove \
-  --resource-group <rg> --name <function-app-name> \
-  --scm-site --rule-name "temp-manual-deploy"
-```
+Follow the [manual publish commands in the README](../README.md#2-publish-function-code). They package the code, add an IP-scoped SCM rule, deploy with `config-zip`, and remove the rule and temporary ZIP afterward.
 
 Note: this IP rule is added imperatively, not through `main.bicep` - it persists
 until step 4 removes it, or until the next `az deployment group create` resets

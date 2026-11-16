@@ -17,4 +17,4 @@
 # Set Information preference so Write-Information messages appear in logs
 $InformationPreference = 'Continue'
 
-Write-Information "DMARC-to-Sentinel Function App initialized. PowerShell $($PSVersionTable.PSVersion)"
+Write-Information "DMARC for Defender XDR Function App initialized. PowerShell $($PSVersionTable.PSVersion)"

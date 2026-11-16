@@ -24,7 +24,7 @@ This repository includes comprehensive Pester tests to verify PowerShell scripts
 - **Grant-MIExchangeRBAC.ps1** (`tests/Grant-MIExchangeRBAC.Tests.ps1`):
   - Script structure and syntax validation
   - Managed Identity operations
-  - Microsoft Graph API role assignments
+  - Existing Microsoft Graph application-permission checks
   - Exchange Online RBAC configuration
   - Security validations (least privilege, scope restrictions)
   - Error handling

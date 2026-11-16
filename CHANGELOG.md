@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-12
+
+### Security
+- Mailbox setup now grants only mailbox-scoped Exchange Application RBAC roles, instead of tenant-wide Microsoft Graph mail application permissions. It stops on existing direct application permissions or conflicting Exchange assignments; an administrator must review and remove unwanted grants before retrying.
+
+### Changed
+- Updated deployment guidance for the verified ZIP publishing path, mailbox permission prerequisites, and verification steps.
+- Updated remaining DMARC-to-Sentinel labels to DMARC for Defender XDR.
+
+### Fixed
+- Version metadata tests now support both LF and CRLF checkouts.
+
 ## [1.4.3] - 2026-08-13
 
 ### Changed

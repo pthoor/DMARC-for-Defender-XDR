@@ -120,7 +120,7 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "`n═══════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host '  DMARC Pipeline — Graph Parity Preview' -ForegroundColor Cyan
+Write-Host '  DMARC for Defender XDR — Graph Parity Preview' -ForegroundColor Cyan
 Write-Host "═══════════════════════════════════════════════════════`n" -ForegroundColor Cyan
 
 Write-Host '[1/4] Validating Azure CLI session...' -ForegroundColor Yellow

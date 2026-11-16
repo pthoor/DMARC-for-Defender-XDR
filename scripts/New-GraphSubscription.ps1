@@ -30,7 +30,7 @@
     Prerequisites:
     - Azure resources deployed via main.bicep (includes partner configuration).
     - Function app published (includes the SetupHelper function).
-    - Managed Identity has Graph Mail.Read permission
+    - Managed Identity has mailbox-scoped Exchange Application Mail.Read permission
       (run Grant-MIExchangeRBAC.ps1 first).
 #>
 
@@ -49,7 +49,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 Write-Host "`n═══════════════════════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  DMARC Pipeline — Graph Subscription Setup" -ForegroundColor Cyan
+Write-Host "  DMARC for Defender XDR — Graph Subscription Setup" -ForegroundColor Cyan
 Write-Host "═══════════════════════════════════════════════════════`n" -ForegroundColor Cyan
 
 # ─────────────────────────────────────────────
@@ -92,11 +92,7 @@ if ('SetupHelper' -notin $deployedFunctions) {
     Write-Error @"
 SetupHelper function is not deployed. Deployed functions: [$($deployedFunctions -join ', ')].
 
-Publish the function app code first:
-  cd src/function
-  func azure functionapp publish $FunctionAppName --powershell
-
-If 'func publish' fails, ensure the storage account allows shared key access.
+Publish the function app code first using the manual ZIP deployment steps in README.md.
 "@
     throw
 }
@@ -119,6 +115,24 @@ if ($keysResponse.StatusCode -ne 200) {
 }
 $masterKey = ($keysResponse.Content | ConvertFrom-Json).masterKey
 
+# Read settings before subscription setup so a retry can renew the existing
+# subscription instead of creating another one after a partial previous run.
+$settingsPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$FunctionAppName/config/appsettings/list?api-version=2024-04-01"
+$settingsResponse = Invoke-AzRestMethod -Path $settingsPath -Method POST
+if ($settingsResponse.StatusCode -ne 200) {
+    throw "Failed to read Function App settings (HTTP $($settingsResponse.StatusCode))."
+}
+$currentSettings = ($settingsResponse.Content | ConvertFrom-Json).properties
+$existingGraphSubscriptionId = [string]$currentSettings.GRAPH_SUBSCRIPTION_ID
+if ($existingGraphSubscriptionId) {
+    $parsedSubscriptionId = [guid]::Empty
+    if (-not [guid]::TryParse($existingGraphSubscriptionId, [ref]$parsedSubscriptionId)) {
+        throw 'GRAPH_SUBSCRIPTION_ID is not a valid GUID. Review the existing Function App setting before continuing.'
+    }
+    $existingGraphSubscriptionId = $parsedSubscriptionId.ToString()
+    Write-Host "  Existing Graph subscription found; it will be resumed rather than duplicated." -ForegroundColor Gray
+}
+
 # Build notification URL
 $partnerTopicName = "DmarcPipeline-$FunctionAppName"
 $notificationUrl = "EventGrid:?azuresubscriptionid=$SubscriptionId&resourcegroup=$ResourceGroupName&partnertopic=$partnerTopicName&location=$resourceGroupLocation"
@@ -127,108 +141,68 @@ $expirationDateTime = (Get-Date).AddMinutes(4200).ToUniversalTime().ToString('yy
 Write-Host "  Partner topic: $partnerTopicName" -ForegroundColor Gray
 Write-Host "  Expiration: $expirationDateTime" -ForegroundColor Gray
 
-$setupBody = @{
+$setupPayload = @{
     notificationUrl    = $notificationUrl
     expirationDateTime = $expirationDateTime
-} | ConvertTo-Json
+}
+if ($existingGraphSubscriptionId) {
+    $setupPayload.subscriptionId = $existingGraphSubscriptionId
+}
+$setupBody = $setupPayload | ConvertTo-Json
 
 # Pass the master key as a request header — never as a query parameter — to keep it
 # out of shell history, process listings, server access logs, and exception messages.
 $setupUri = "https://$defaultHostName/api/SetupHelper"
 $setupHeaders = @{ 'x-functions-key' = $masterKey }
 
-# Invoke SetupHelper (retry for cold start)
+# Retry only a confirmed 404 (cold-start route discovery). A timeout or 5xx may
+# follow successful Graph creation, so do not automatically replay the POST.
 $graphSubscriptionId = $null
 $maxAttempts = 4
 for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-    try {
-        Write-Host "  Calling SetupHelper (attempt $attempt/$maxAttempts)..." -ForegroundColor Gray
-
-        # Use Invoke-WebRequest instead of Invoke-RestMethod so we can read
-        # the response body on non-2xx status codes (SetupHelper returns
-        # { error: "..." } on 400/500 which Invoke-RestMethod would discard).
-        $webResponse = Invoke-WebRequest -Uri $setupUri -Method POST -Headers $setupHeaders -Body $setupBody `
-            -ContentType 'application/json' -TimeoutSec 120 -UseBasicParsing -ErrorAction Stop
-        $response = $webResponse.Content | ConvertFrom-Json
-
-        if ($response.subscriptionId) {
-            $graphSubscriptionId = $response.subscriptionId
-            break
-        }
-        if ($response.error) {
-            Write-Host "  Error: $($response.error)" -ForegroundColor Red
-        }
-    } catch {
-        $statusCode = $null
-        $errorBody = $null
-        if ($_.Exception.Response) {
-            $statusCode = [int]$_.Exception.Response.StatusCode
-            try {
-                $errorStream = $_.Exception.Response.GetResponseStream()
-                $reader = [System.IO.StreamReader]::new($errorStream)
-                $errorBody = $reader.ReadToEnd()
-                $reader.Dispose()
-            } catch { }
-        }
-
-        # Parse error message from SetupHelper's JSON response
-        $errorMessage = $_.Exception.Message
-        if ($errorBody) {
-            try {
-                $errorJson = $errorBody | ConvertFrom-Json
-                if ($errorJson.error) { $errorMessage = $errorJson.error }
-            } catch {
-                $errorMessage = $errorBody
-            }
-        }
-
-        if ($statusCode -eq 404) {
-            Write-Error @"
-SetupHelper returned HTTP 404 (Not Found). The function endpoint is not reachable.
-
-Possible causes:
-  1. Function code not published: Run 'func azure functionapp publish $FunctionAppName --powershell' from src/function/
-  2. Storage access: If 'func publish' fails, check that the storage account allows shared key access.
-  3. Cold start: The Function App may need more time to initialize (Flex Consumption).
-"@
-            throw
-        }
-
-        Write-Host "  HTTP $statusCode — $errorMessage" -ForegroundColor Red
-
-        if ($statusCode -eq 500) {
-            Write-Host "" -ForegroundColor Yellow
-            Write-Host "  Troubleshooting HTTP 500:" -ForegroundColor Yellow
-            Write-Host "    1. Check Function App logs: az functionapp log tail -n $FunctionAppName -g $ResourceGroupName" -ForegroundColor Gray
-            Write-Host "    2. Verify MAILBOX_USER_ID app setting is correct (Entra ID object ID of mailbox user)" -ForegroundColor Gray
-            Write-Host "    3. Verify Key Vault reference for GRAPH_CLIENT_STATE resolved (check Configuration in Portal)" -ForegroundColor Gray
-            Write-Host "    4. Verify MI has Mail.Read permission (run Grant-MIExchangeRBAC.ps1 first)" -ForegroundColor Gray
-            Write-Host "    5. Permission propagation can take up to 2 hours after granting" -ForegroundColor Gray
-            Write-Host ""
-        }
-
-        if ($attempt -lt $maxAttempts) {
-            Write-Host "  Retrying in 15s..." -ForegroundColor Gray
-            Start-Sleep -Seconds 15
-        } else {
-            Write-Error "SetupHelper failed after $maxAttempts attempts: $errorMessage"
-            throw
-        }
-    }
+    $webResponse = Invoke-WebRequest -Uri $setupUri -Method POST -Headers $setupHeaders -Body $setupBody `
+        -ContentType 'application/json' -TimeoutSec 120 -UseBasicParsing -SkipHttpErrorCheck -ErrorAction Stop
+    if ($webResponse.StatusCode -ne 404 -or $attempt -eq $maxAttempts) { break }
+    Write-Host "  SetupHelper route is not ready (404); retrying in 15s ($attempt/$maxAttempts)..." -ForegroundColor Gray
+    Start-Sleep -Seconds 15
 }
+if ($webResponse.StatusCode -eq 404) {
+    throw "SetupHelper route was not available after $maxAttempts attempts. Confirm the function code is deployed."
+}
+$response = $webResponse.Content | ConvertFrom-Json
+if ($webResponse.StatusCode -ne 200 -or -not $response.subscriptionId) {
+    $errorMessage = if ($response.error) { [string]$response.error } else { "HTTP $($webResponse.StatusCode) from SetupHelper." }
+    throw "SetupHelper failed: $errorMessage. It was not retried automatically to avoid duplicate Graph subscriptions. Inspect the Function App logs and GRAPH_SUBSCRIPTION_ID before retrying."
+}
+$graphSubscriptionId = [string]$response.subscriptionId
 
 if (-not $graphSubscriptionId) {
-    Write-Error "Failed to create Graph subscription. Check that the MI has Mail.Read application permission and Exchange RBAC is configured."
+    Write-Error "Failed to create Graph subscription. Check that the MI has scoped Exchange Application Mail.Read permission."
     throw
 }
 
 Write-Host "  Subscription created: $graphSubscriptionId" -ForegroundColor Green
 
+# Save immediately: if Event Grid setup fails below, the next run renews this
+# subscription instead of creating another one.
+$updatedProperties = @{}
+foreach ($prop in $currentSettings.PSObject.Properties) {
+    $updatedProperties[$prop.Name] = $prop.Value
+}
+$updatedProperties['GRAPH_SUBSCRIPTION_ID'] = $graphSubscriptionId
+$updateBody = @{ properties = $updatedProperties } | ConvertTo-Json -Depth 5
+$updatePath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$FunctionAppName/config/appsettings?api-version=2024-04-01"
+$updateResponse = Invoke-AzRestMethod -Path $updatePath -Method PUT -Payload $updateBody
+if ($updateResponse.StatusCode -ne 200) {
+    throw "Subscription $graphSubscriptionId was created or renewed, but saving it to app settings failed (HTTP $($updateResponse.StatusCode)). Save GRAPH_SUBSCRIPTION_ID manually before retrying."
+}
+Write-Host "  GRAPH_SUBSCRIPTION_ID saved before Event Grid setup." -ForegroundColor Green
+
 # ─────────────────────────────────────────────
 # Step 3: Activate Partner Topic & create Event Subscription
 # ─────────────────────────────────────────────
 
-Write-Host "`n[3/4] Activating partner topic..." -ForegroundColor Yellow
+Write-Host "`n[3/4] Activating Partner Topic..." -ForegroundColor Yellow
 
 $partnerTopicPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.EventGrid/partnerTopics/$partnerTopicName"
 $apiVersion = 'api-version=2022-06-15'
@@ -238,6 +212,7 @@ $topicFound = $false
 for ($attempt = 1; $attempt -le 18; $attempt++) {
     $topicResponse = Invoke-AzRestMethod -Path "${partnerTopicPath}?${apiVersion}" -Method GET
     if ($topicResponse.StatusCode -eq 200) {
+        $partnerTopic = $topicResponse.Content | ConvertFrom-Json
         $topicFound = $true
         Write-Host "  Partner topic found." -ForegroundColor Green
         break
@@ -251,13 +226,19 @@ if (-not $topicFound) {
     throw
 }
 
-# Activate
-$activateResponse = Invoke-AzRestMethod -Path "${partnerTopicPath}/activate?${apiVersion}" -Method POST
-if ($activateResponse.StatusCode -notin 200, 202) {
-    Write-Error "Failed to activate partner topic (HTTP $($activateResponse.StatusCode))."
-    throw
+if ($partnerTopic.properties.activationState -eq 'Activated') {
+    Write-Host "  Partner topic is already activated." -ForegroundColor Gray
 }
-Write-Host "  Partner topic activated." -ForegroundColor Green
+elseif ($partnerTopic.properties.activationState -eq 'NeverActivated') {
+    $activateResponse = Invoke-AzRestMethod -Path "${partnerTopicPath}/activate?${apiVersion}" -Method POST
+    if ($activateResponse.StatusCode -notin 200, 202) {
+        throw "Failed to activate partner topic (HTTP $($activateResponse.StatusCode))."
+    }
+    Write-Host "  Partner topic activated." -ForegroundColor Green
+}
+else {
+    throw "Partner topic has unexpected activation state '$($partnerTopic.properties.activationState)'."
+}
 
 # Create event subscription
 Write-Host "  Creating event subscription..." -ForegroundColor Gray
@@ -286,32 +267,15 @@ if ($eventSubResponse.StatusCode -notin 200, 201) {
 Write-Host "  Event subscription created." -ForegroundColor Green
 
 # ─────────────────────────────────────────────
-# Step 4: Save subscription ID
+# Step 4: Verify saved subscription ID
 # ─────────────────────────────────────────────
 
-Write-Host "`n[4/4] Saving subscription ID..." -ForegroundColor Yellow
-
-# Use ARM REST to update app settings (compatible with Flex Consumption plan)
-$settingsPath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$FunctionAppName/config/appsettings/list?api-version=2024-04-01"
-$currentSettings = (Invoke-AzRestMethod -Path $settingsPath -Method POST).Content | ConvertFrom-Json
-
-# Merge existing settings with the new subscription ID
-$updatedProperties = @{}
-foreach ($prop in $currentSettings.properties.PSObject.Properties) {
-    $updatedProperties[$prop.Name] = $prop.Value
+Write-Host "`n[4/4] Verifying saved subscription ID..." -ForegroundColor Yellow
+$savedSettingsResponse = Invoke-AzRestMethod -Path $settingsPath -Method POST
+if ($savedSettingsResponse.StatusCode -ne 200 -or ($savedSettingsResponse.Content | ConvertFrom-Json).properties.GRAPH_SUBSCRIPTION_ID -ne $graphSubscriptionId) {
+    throw 'GRAPH_SUBSCRIPTION_ID was not saved correctly. Restore the setting before completing setup.'
 }
-$updatedProperties['GRAPH_SUBSCRIPTION_ID'] = $graphSubscriptionId
-
-$updateBody = @{ properties = $updatedProperties } | ConvertTo-Json -Depth 5
-$updatePath = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Web/sites/$FunctionAppName/config/appsettings?api-version=2024-04-01"
-$updateResponse = Invoke-AzRestMethod -Path $updatePath -Method PUT -Payload $updateBody
-
-if ($updateResponse.StatusCode -ne 200) {
-    Write-Error "Failed to save app settings (HTTP $($updateResponse.StatusCode))."
-    throw
-}
-
-Write-Host "  GRAPH_SUBSCRIPTION_ID saved." -ForegroundColor Green
+Write-Host "  GRAPH_SUBSCRIPTION_ID verified." -ForegroundColor Green
 
 # ─────────────────────────────────────────────
 # Done

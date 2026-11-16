@@ -4,7 +4,7 @@
     {
       "type": 1,
       "content": {
-        "json": "# DMARC Report Analytics\n\n**Workbook release:** v1.4.3\n\n**Deployed workbook version:** This workbook instance is `v1.4.3`.\n\n**GitHub:** [pthoor/DMARC-for-Defender-XDR](https://github.com/pthoor/DMARC-for-Defender-XDR)  \n**Latest release:** [Check releases](https://github.com/pthoor/DMARC-for-Defender-XDR/releases/latest)\n\n> **Update check:** Compare the deployed workbook version above with the latest GitHub release. If a newer version is available, import the updated `workbook/dmarc-workbook.json`.\n\nThis workbook provides comprehensive DMARC analytics with visualizations across 5 tabs. Monitor email authentication health, detect spoofing, track compliance scores, analyze senders, and plan policy enforcement across your domains. Filter by domain, reporter, and time range."
+        "json": "# DMARC Report Analytics\n\n**Workbook release:** v1.5.0\n\n**Deployed workbook version:** This workbook instance is `v1.5.0`.\n\n**GitHub:** [pthoor/DMARC-for-Defender-XDR](https://github.com/pthoor/DMARC-for-Defender-XDR)  \n**Latest release:** [Check releases](https://github.com/pthoor/DMARC-for-Defender-XDR/releases/latest)\n\n> **Update check:** Compare the deployed workbook version above with the latest GitHub release. If a newer version is available, import the updated `workbook/dmarc-workbook.json`.\n\nThis workbook provides comprehensive DMARC analytics with visualizations across 5 tabs. Monitor email authentication health, detect spoofing, track compliance scores, analyze senders, and plan policy enforcement across your domains. Filter by domain, reporter, and time range."
       },
       "name": "header"
     },
