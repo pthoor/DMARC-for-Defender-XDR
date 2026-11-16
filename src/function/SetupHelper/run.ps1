@@ -153,8 +153,18 @@ try {
 
     if (-not $result) {
         Write-Information "Creating Graph subscription for user $mailboxUserId"
-        $result = Invoke-GraphRequest -Uri 'https://graph.microsoft.com/v1.0/subscriptions' `
-            -Method POST -Body $subscriptionBody -Token $graphToken
+        $createResponse = Invoke-WebRequest -Uri 'https://graph.microsoft.com/v1.0/subscriptions' `
+            -Method POST `
+            -Headers @{ Authorization = "Bearer $graphToken" } `
+            -Body ($subscriptionBody | ConvertTo-Json -Depth 10) `
+            -ContentType 'application/json' -SkipHttpErrorCheck -ErrorAction Stop
+        if ($createResponse.StatusCode -ne 201) {
+            throw "Graph subscription creation failed (HTTP $($createResponse.StatusCode)); it was not retried automatically to avoid duplicate subscriptions."
+        }
+        $result = $createResponse.Content | ConvertFrom-Json
+        if (-not $result.id) {
+            throw 'Graph subscription creation returned no subscription ID; it was not retried automatically.'
+        }
         Write-Information "Subscription created: $($result.id)"
     }
     else {

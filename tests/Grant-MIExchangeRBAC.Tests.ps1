@@ -223,7 +223,7 @@ Describe 'Grant-MIExchangeRBAC.ps1 behavior' {
         Mock Get-MgContext { @{ TenantId = $script:tenantId; Scopes = @('Application.Read.All') } }
         Mock Get-MgServicePrincipal { @{ Id = $script:identityId; AppId = $script:appId } }
         Mock Get-MgServicePrincipalAppRoleAssignment { $script:appRoles }
-        Mock Get-ConnectionInformation { @{ State = 'Connected'; Organization = $script:tenantId } }
+        Mock Get-ConnectionInformation { @{ State = 'Connected'; TenantID = $script:tenantId } }
         Mock Get-EXOMailbox { @{ PrimarySmtpAddress = 'dmarc@example.com'; ExternalDirectoryObjectId = $script:mailboxId; UserPrincipalName = 'dmarc@example.com' } }
         Mock Get-ManagementScope { $script:scopes }
         Mock Get-ServicePrincipal { $script:existingServicePrincipal }
@@ -245,8 +245,8 @@ Describe 'Grant-MIExchangeRBAC.ps1 behavior' {
         $script:existingServicePrincipal = @(@{ AppId = $script:appId; ObjectId = $script:identityId })
         $script:scopes = @(@{ Name = $script:scopeName; RecipientFilter = "PrimarySmtpAddress -eq 'dmarc@example.com'" })
         $script:assignments = @(
-            @{ Name = "DMARC-$script:identityId-Read"; App = $script:identityId; Role = 'Application Mail.Read'; CustomResourceScope = $script:scopeName; Enabled = $true }
-            @{ Name = "DMARC-$script:identityId-ReadWrite"; App = $script:identityId; Role = 'Application Mail.ReadWrite'; CustomResourceScope = $script:scopeName; Enabled = $true }
+            @{ Name = "DMARC-$script:identityId-Read"; RoleAssignee = $script:identityId; Role = 'Application Mail.Read'; CustomResourceScope = $script:scopeName; Enabled = $true }
+            @{ Name = "DMARC-$script:identityId-ReadWrite"; RoleAssignee = $script:identityId; Role = 'Application Mail.ReadWrite'; CustomResourceScope = $script:scopeName; Enabled = $true }
         )
         . $scriptPath -FunctionAppName 'test' -ResourceGroupName 'test' -MailboxAddress 'dmarc@example.com'
         Should -Invoke New-ServicePrincipal -Times 0 -Exactly
@@ -258,8 +258,8 @@ Describe 'Grant-MIExchangeRBAC.ps1 behavior' {
         $script:existingServicePrincipal = @(@{ AppId = $script:appId; ObjectId = $script:identityId })
         $script:scopes = @(@{ Name = 'existing-mailbox-scope'; RecipientFilter = "PrimarySmtpAddress -eq 'dmarc@example.com'"; Exclusive = $false; RecipientRoot = $null })
         $script:assignments = @(
-            @{ Name = 'existing-read'; App = $script:identityId; Role = 'Application Mail.Read'; CustomResourceScope = 'existing-mailbox-scope'; Enabled = $true }
-            @{ Name = 'existing-write'; App = $script:identityId; Role = 'Application Mail.ReadWrite'; CustomResourceScope = 'existing-mailbox-scope'; Enabled = $true }
+            @{ Name = 'existing-read'; RoleAssignee = $script:identityId; Role = 'Application Mail.Read'; CustomResourceScope = 'existing-mailbox-scope'; Enabled = $true }
+            @{ Name = 'existing-write'; RoleAssignee = $script:identityId; Role = 'Application Mail.ReadWrite'; CustomResourceScope = 'existing-mailbox-scope'; Enabled = $true }
         )
         . $scriptPath -FunctionAppName 'test' -ResourceGroupName 'test' -MailboxAddress 'dmarc@example.com'
         Should -Invoke New-ManagementScope -Times 0 -Exactly
@@ -297,9 +297,15 @@ Describe 'Grant-MIExchangeRBAC.ps1 behavior' {
     }
 
     It 'rejects an independently granted Exchange role' {
-        $script:assignments = @(@{ Name = 'unscoped'; App = $script:identityId; Role = 'Application Mail.Read'; CustomResourceScope = ''; Enabled = $true })
+        $script:assignments = @(@{ Name = 'unscoped'; RoleAssignee = $script:identityId; Role = 'Application Mail.Read'; CustomResourceScope = ''; Enabled = $true })
         { . $scriptPath -FunctionAppName 'test' -ResourceGroupName 'test' -MailboxAddress 'dmarc@example.com' } | Should -Throw '*unexpected Exchange application role assignment*'
         Should -Invoke New-ManagementRoleAssignment -Times 0 -Exactly
+    }
+
+    It 'rejects an Exchange connection to a different tenant' {
+        Mock Get-ConnectionInformation { @{ State = 'Connected'; TenantID = 'other-tenant' } }
+        { . $scriptPath -FunctionAppName 'test' -ResourceGroupName 'test' -MailboxAddress 'dmarc@example.com' } | Should -Throw '*Connect to Exchange Online for the selected Azure tenant*'
+        Should -Invoke New-ServicePrincipal -Times 0 -Exactly
     }
 
     It 'rejects a Function App configured for a different mailbox' {
@@ -321,7 +327,7 @@ Describe 'Grant-MIExchangeRBAC.ps1 behavior' {
     }
 
     It 'does not replace an assignment owned by another identity' {
-        $script:assignments = @(@{ Name = "DMARC-$script:identityId-Read"; App = 'other-identity'; Role = 'Application Mail.Read'; CustomResourceScope = $script:scopeName; Enabled = $true })
+        $script:assignments = @(@{ Name = "DMARC-$script:identityId-Read"; RoleAssignee = 'other-identity'; Role = 'Application Mail.Read'; CustomResourceScope = $script:scopeName; Enabled = $true })
         { . $scriptPath -FunctionAppName 'test' -ResourceGroupName 'test' -MailboxAddress 'dmarc@example.com' } | Should -Throw '*unexpected properties*'
         Should -Invoke New-ManagementRoleAssignment -Times 0 -Exactly
     }

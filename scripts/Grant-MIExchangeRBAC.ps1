@@ -127,7 +127,7 @@ if ($exchangeConnections.Count -eq 0) {
     }
     $exchangeConnections = @(Get-ConnectionInformation -ErrorAction Stop | Where-Object { $_.State -eq 'Connected' })
 }
-if ($exchangeConnections.Count -ne 1 -or $exchangeConnections[0].Organization -ne $tenantId) {
+if ($exchangeConnections.Count -ne 1 -or $exchangeConnections[0].TenantID -ne $tenantId) {
     throw 'Connect to Exchange Online for the selected Azure tenant using Connect-ExchangeOnline -Organization <tenant-id>, and disconnect any other Exchange sessions.'
 }
 
@@ -174,7 +174,7 @@ if ($existingExoSp.Count -gt 1 -or ($existingExoSp.Count -eq 1 -and $existingExo
 }
 $exoRoles = @('Application Mail.Read', 'Application Mail.ReadWrite')
 $allAssignments = @(Get-ManagementRoleAssignment -RoleAssigneeType ServicePrincipal -ErrorAction Stop)
-$identityAssignments = @($allAssignments | Where-Object { $_.App -eq $miObjectId })
+$identityAssignments = @($allAssignments | Where-Object { $_.RoleAssignee -eq $miObjectId })
 foreach ($assignment in $identityAssignments) {
     $assignedScopes = @($allScopes | Where-Object { $_.Name -eq [string]$assignment.CustomResourceScope })
     if ([string]$assignment.Role -notin $exoRoles -or -not $assignment.Enabled -or $assignedScopes.Count -ne 1 -or $assignedScopes[0].Exclusive -or $assignedScopes[0].RecipientFilter -ine $recipientFilter) {

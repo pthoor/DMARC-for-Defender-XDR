@@ -650,6 +650,16 @@ Describe 'SetupHelper/run.ps1' {
             $content | Should -Match 'Stored subscription does not match'
         }
 
+        It 'Should not retry subscription creation after ambiguous Graph failures' {
+            $content = Get-Content $scriptPath -Raw
+            $creationBlock = [regex]::Match($content, '(?s)if \(-not \$result\) \{(.*?)\r?\n    \}\r?\n    else \{').Groups[1].Value
+            $creationBlock | Should -Match 'Invoke-WebRequest'
+            $creationBlock | Should -Match 'SkipHttpErrorCheck'
+            $creationBlock | Should -Match 'StatusCode -ne 201'
+            $creationBlock | Should -Match 'not retried automatically'
+            $creationBlock | Should -Not -Match 'Invoke-GraphRequest'
+        }
+
         It 'Should create a replacement only after the stored subscription returns 404' {
             $content = Get-Content $scriptPath -Raw
             $content | Should -Match 'StatusCode -eq 404'
