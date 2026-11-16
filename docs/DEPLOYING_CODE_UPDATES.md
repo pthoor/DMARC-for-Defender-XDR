@@ -100,8 +100,11 @@ steps:
       package: src/function
 ```
 
-No client secret in GitHub either way - same OIDC pattern as
-[docs/CI_LIVE_VALIDATION.md](CI_LIVE_VALIDATION.md).
+No client secret in GitHub either way. The example above uses a branch-scoped OIDC
+credential. To use a protected GitHub environment instead, change the federated
+credential's `subject` to `repo:<owner>/<repo>:environment:<environment-name>` and
+set the deployment job's `environment` to that same name. Configure required
+reviewers on the environment to gate deployment.
 
 **If `Azure/functions-action` fails with a `415`-style error**, replace that step
 with the verified CLI command instead (still uses the OIDC session from `azure/login`

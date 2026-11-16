@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Removed the public live-validation workflow so Azure tenant credentials are no longer connected to public CI. Detection rules can still be validated manually against a test workspace with `scripts/Test-DetectionRulesLive.ps1`; see `docs/LIVE_VALIDATION.md`.
+- The live-validation script no longer prints raw Azure responses or the workspace name.
+
 ## [1.5.0] - 2026-11-12
 
 ### Security
