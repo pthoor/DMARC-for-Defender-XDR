@@ -182,3 +182,32 @@ Describe 'Detection rule schema validation' {
         }
     }
 }
+
+Describe 'Live detection validation script' {
+    It 'is not run from public CI workflows' {
+        # Public Actions logs and tenant credentials are out of scope; run it manually instead.
+        $workflowsPath = Join-Path (Split-Path -Path $PSScriptRoot -Parent) '.github/workflows'
+        $references = Get-ChildItem -Path $workflowsPath -Filter '*.yml' -File |
+            Select-String -Pattern 'Test-DetectionRulesLive' -SimpleMatch
+        $references | Should -BeNullOrEmpty
+    }
+
+    It 'does not log a simulated Azure failure response' {
+        $scriptPath = Join-Path (Split-Path -Path $PSScriptRoot -Parent) 'scripts/Test-DetectionRulesLive.ps1'
+        $quotedScriptPath = $scriptPath.Replace("'", "''")
+        $childScript = @"
+function global:az {
+    `$global:LASTEXITCODE = 0
+    if (`$args -contains 'put') {
+        `$global:LASTEXITCODE = 1
+        Write-Output 'sensitive-azure-response-marker'
+    }
+}
+& '$quotedScriptPath' -SubscriptionId 'test-subscription' -ResourceGroupName 'test-group' -WorkspaceName 'test-workspace'
+"@
+        $output = & (Get-Process -Id $PID).Path -NoProfile -Command $childScript 2>&1 | Out-String
+        $LASTEXITCODE | Should -Be 1
+        $output | Should -Match 'Azure rejected the rule'
+        $output | Should -Not -Match 'sensitive-azure-response-marker|test-workspace'
+    }
+}

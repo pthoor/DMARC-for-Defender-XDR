@@ -51,9 +51,9 @@ az bicep build --file infra/main.bicep
 ### Detection rule validation
 `tests/DetectionRules.Tests.ps1` (part of `Invoke-Pester` above) statically validates
 `detections/*.yaml` against the Sentinel analytics rule schema - no Azure access
-needed, runs on every PR. A separate, maintainer-only CI workflow additionally
-validates detection rules against a real Sentinel workspace; see
-[docs/CI_LIVE_VALIDATION.md](docs/CI_LIVE_VALIDATION.md) if you're setting that up.
+needed, runs on every PR. Maintainers can additionally validate detection rules
+against a real Sentinel test workspace before a release; see
+[docs/LIVE_VALIDATION.md](docs/LIVE_VALIDATION.md).
 
 ### Deploying code changes
 If you're testing infra/code changes against a real deployment, see

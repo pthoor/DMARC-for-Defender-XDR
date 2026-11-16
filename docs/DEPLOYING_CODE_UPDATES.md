@@ -100,8 +100,8 @@ steps:
       package: src/function
 ```
 
-No client secret in GitHub either way - same OIDC pattern as
-[docs/CI_LIVE_VALIDATION.md](CI_LIVE_VALIDATION.md).
+No client secret in GitHub either way - use an OIDC federated credential scoped to
+a protected GitHub environment.
 
 **If `Azure/functions-action` fails with a `415`-style error**, replace that step
 with the verified CLI command instead (still uses the OIDC session from `azure/login`

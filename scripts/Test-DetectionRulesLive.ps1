@@ -21,8 +21,8 @@
 
   Requires an authenticated `az` CLI session (az login) with a role that can
   create/delete Microsoft.SecurityInsights/alertRules on the target workspace -
-  nothing broader. Intended to run only from trusted CI contexts (see
-  .github/workflows/detection-rules-live-validate.yml) or by a maintainer locally.
+  nothing broader. Intended to be run manually by a maintainer against a dedicated
+  test workspace (see docs/LIVE_VALIDATION.md).
 #>
 
 [CmdletBinding()]
@@ -127,7 +127,13 @@ function ConvertTo-SentinelRulePayload {
 
 Import-Module powershell-yaml -RequiredVersion 0.4.7 -ErrorAction Stop
 
-az account set --subscription $SubscriptionId | Out-Null
+$null = & {
+    $ErrorActionPreference = 'Continue'
+    az account set --subscription $SubscriptionId 2>&1
+}
+if ($LASTEXITCODE -ne 0) {
+    throw 'Unable to select the Azure subscription. Check the subscription and service principal access.'
+}
 
 Write-Host "Sweeping any pre-existing CI-validation rules from a prior run..."
 foreach ($ruleId in $testRuleIds.Values) {
@@ -151,7 +157,7 @@ try {
             $payload = ConvertTo-SentinelRulePayload -Parsed $parsed -FileName $file.Name
         }
         catch {
-            Write-Check -Name $file.Name -Passed $false -Detail "Payload construction failed: $_"
+            Write-Check -Name $file.Name -Passed $false -Detail 'Payload construction failed. Check the detection rule locally.'
             continue
         }
 
@@ -160,12 +166,12 @@ try {
             ($payload | ConvertTo-Json -Depth 10 -Compress) | Set-Content -Path $bodyPath -NoNewline
 
             # az CLI routinely writes non-fatal warnings to stderr even on success. Merging
-            # stderr into $response via 2>&1 while the script-wide $ErrorActionPreference is
+            # stderr via 2>&1 while the script-wide $ErrorActionPreference is
             # 'Stop' can turn that merged stderr text into a terminating NativeCommandError -
             # aborting validation for every remaining file instead of just recording a [FAIL]
             # for this one. Run the native call in its own scope with a local, non-terminating
             # ErrorActionPreference so only $LASTEXITCODE (checked below) determines pass/fail.
-            $response = & {
+            $null = & {
                 $ErrorActionPreference = 'Continue'
                 az rest --method put `
                     --url "https://management.azure.com$resourceBase/$ruleId`?api-version=$apiVersion" `
@@ -179,11 +185,11 @@ try {
                 Write-Check -Name $file.Name -Passed $true -Detail "Azure accepted the rule schema (rule id $ruleId, disabled, will be deleted now)."
             }
             else {
-                Write-Check -Name $file.Name -Passed $false -Detail "Azure rejected the rule: $response"
+                Write-Check -Name $file.Name -Passed $false -Detail 'Azure rejected the rule. Diagnose the response locally in a secure environment.'
             }
         }
         catch {
-            Write-Check -Name $file.Name -Passed $false -Detail "Live validation request failed: $_"
+            Write-Check -Name $file.Name -Passed $false -Detail 'Live validation request failed. Diagnose the request locally in a secure environment.'
         }
         finally {
             Remove-Item -Path $bodyPath -ErrorAction SilentlyContinue
@@ -202,4 +208,4 @@ if ($script:Failures -gt 0) {
     exit 1
 }
 
-Write-Host "`nAll detection rules passed live validation against $WorkspaceName." -ForegroundColor Green
+Write-Host "`nAll detection rules passed live validation." -ForegroundColor Green
