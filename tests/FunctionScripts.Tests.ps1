@@ -573,6 +573,12 @@ Describe 'SetupHelper/run.ps1' {
             $content | Should -Match 'Missing required fields'
         }
 
+        It 'Should validate an optional stored subscription ID' {
+            $content = Get-Content $scriptPath -Raw
+            $content | Should -Match 'subscriptionId must be a GUID'
+            $content | Should -Match '\[guid\]::TryParse'
+        }
+
         It 'Should accept EventGrid scheme for notificationUrl' {
             $content = Get-Content $scriptPath -Raw
             # EventGrid: is the correct scheme for Graph subscriptions delivered via Event Grid partner topics
@@ -635,6 +641,19 @@ Describe 'SetupHelper/run.ps1' {
         It 'Should POST to the Graph subscriptions endpoint' {
             $content = Get-Content $scriptPath -Raw
             $content | Should -Match 'graph\.microsoft\.com/v1\.0/subscriptions'
+        }
+
+        It 'Should inspect and renew a matching stored subscription rather than create another' {
+            $content = Get-Content $scriptPath -Raw
+            $content | Should -Match 'Resuming Graph subscription'
+            $content | Should -Match 'Invoke-GraphRequest.*Method PATCH'
+            $content | Should -Match 'Stored subscription does not match'
+        }
+
+        It 'Should create a replacement only after the stored subscription returns 404' {
+            $content = Get-Content $scriptPath -Raw
+            $content | Should -Match 'StatusCode -eq 404'
+              $content | Should -Match '(?is)StatusCode -ne 200.*not creating another subscription'
         }
 
         It 'Should return the created subscription ID' {

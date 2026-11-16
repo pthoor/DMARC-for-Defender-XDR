@@ -46,7 +46,7 @@ Treat DMARCReports_CL as potentially privacy-relevant telemetry.
 - Deploy with the shortest retention that still supports security operations.
 
 2. Right to erasure:
-- Data is security telemetry, not customer content, but regional obligations may still apply.
+- Data is security telemetry derived from aggregate reports, but regional obligations may still apply.
 - Erasure is handled by retention policy expiration or scoped purge operations in LAW.
 
 3. Access requests:

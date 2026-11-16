@@ -57,7 +57,7 @@ RUF reports provide per-message failure details:
 - **Alignment and compliance analysis**: Surface SPF/DKIM alignment failures and DMARC policy health gaps
 - **Subdomain discovery**: Track email from subdomains, detect newly active senders, and flag policy blind spots
 - **Policy guidance**: Built-in recommendations for staged DMARC policy progression with service-specific fix guidance
-- **Zero secrets**: Uses Azure Managed Identity for authentication (no client secrets)
+- **No client secrets**: Uses Azure Managed Identity for authentication; notification validation still uses a client-state secret
 - **Privacy-first by design**: RUF forensic reports remain intentionally unsupported to avoid message-level PII processing
 - **Scalable and cost-effective**: Serverless architecture
 
@@ -87,19 +87,18 @@ This project uses **Semantic Versioning** (`MAJOR.MINOR.PATCH`) to support safe 
 
 ## Prerequisites
 
-- Azure subscription with permissions to create resources
+- Azure subscription with permission to create resources and role assignments (for example, Contributor plus User Access Administrator at the deployment resource group). Creating a resource group also requires permission at subscription scope.
 - Microsoft 365 tenant with Exchange Online
 - A shared mailbox to receive DMARC reports (e.g., `dmarc@example.com`)
+- Exchange Administrator (or equivalent Exchange RBAC permissions) for mailbox access setup
+- Directory Readers or another [supported Entra role](https://learn.microsoft.com/en-us/graph/api/serviceprincipal-list-approleassignments?view=graph-rest-1.0#permissions), plus admin consent for the Graph PowerShell delegated `Application.Read.All` permission, to inspect the managed identity's existing application grants
 - [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (>= 2.50)
 - [PowerShell 7.4+](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-linux) (for setup scripts)
   ```bash
   # Linux / Codespace
   sudo apt-get install -y powershell
   ```
-- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) v4 (`func` CLI for publishing)
-  ```bash
-  npm install -g azure-functions-core-tools@4 --unsafe-perm true
-  ```
+- For Bash deployment: `curl`, `zip`, and `jq`
 - PowerShell modules for Step 3 (install once):
   ```powershell
   Install-Module Az.Accounts -Scope CurrentUser -Force
@@ -173,7 +172,7 @@ Or use the Azure Portal to deploy `infra/main.bicep` with custom parameters.
 - `baseName`: Base name for all resources (e.g., "dmarc")
 - `location`: Azure region
 - `mailboxUserId`: Object ID of the shared mailbox user (set via `MAILBOX_USER_ID` env var)
-- `existingWorkspaceId`: (Optional) Use an existing Log Analytics Workspace
+- `existingWorkspaceId`: (Optional) Use an existing Log Analytics workspace in the **same subscription and resource group** as the deployment. The template creates its custom table in the deployment resource group.
 - `deployPartnerConfig`: (Optional, default `true`) Deploy Event Grid partner configuration for Microsoft Graph API. Set to `false` if you already have a partner configuration in the resource group.
 - `deployAlerts`: (Optional, default `false`) Deploy Azure Monitor scheduled query alert rules for DMARC anomaly detection
 - `alertActionGroupId`: (Optional) Resource ID of an Action Group to receive alert notifications
@@ -182,21 +181,70 @@ The Bicep deployment automatically authorizes Microsoft Graph API as an Event Gr
 
 ### 2. Publish Function Code
 
-Publish the function app code (including the `SetupHelper` function used in the next step):
+Publish the function code, including `SetupHelper`, using the `functionAppName` from the Bicep deployment output. With the default `scmAccessMode=restricted`, temporarily allow your deployment machine's public IPv4 address. The commands below remove the allow rule and temporary ZIP afterward, including on failure. They exclude `local.settings.json` from the package.
 
-```bash
-cd src/function
-func azure functionapp publish <function-app-name> --powershell
+**PowerShell:**
+```powershell
+$resourceGroup = 'rg-dmarc-prod'
+$functionApp = '<function-app-name>'
+$publicIp = (Invoke-RestMethod 'https://api.ipify.org').Trim()
+$parsedIp = $null
+if (-not [System.Net.IPAddress]::TryParse($publicIp, [ref]$parsedIp) -or
+  $parsedIp.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+  throw 'Could not determine a public IPv4 address.'
+}
+$zipPath = Join-Path ([System.IO.Path]::GetTempPath()) ("dmarc-deploy-{0}.zip" -f [guid]::NewGuid())
+$ruleAdded = $false
+try {
+  Get-ChildItem ./src/function -Force | Where-Object Name -ne 'local.settings.json' |
+    Compress-Archive -DestinationPath $zipPath
+  az webapp config access-restriction add --resource-group $resourceGroup --name $functionApp `
+    --scm-site --rule-name 'temp-manual-deploy' --action Allow --priority 100 --ip-address "$publicIp/32"
+  if ($LASTEXITCODE -ne 0) { throw 'Failed to add temporary SCM rule.' }
+  $ruleAdded = $true
+  az functionapp deployment source config-zip --resource-group $resourceGroup --name $functionApp `
+    --src $zipPath --build-remote false
+  if ($LASTEXITCODE -ne 0) { throw 'Function code deployment failed.' }
+}
+finally {
+  if ($ruleAdded) {
+    az webapp config access-restriction remove --resource-group $resourceGroup --name $functionApp `
+      --scm-site --rule-name 'temp-manual-deploy'
+    if ($LASTEXITCODE -ne 0) { Write-Warning 'Remove the temporary SCM rule manually.' }
+  }
+  Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
+}
 ```
 
-The function app name is shown in the Bicep deployment output as `functionAppName`.
+**Bash:**
+```bash
+set -euo pipefail
+RESOURCE_GROUP='rg-dmarc-prod'
+FUNCTION_APP='<function-app-name>'
+PUBLIC_IP=$(curl -4fsS https://api.ipify.org)
+ZIP_PATH=$(mktemp "${TMPDIR:-/tmp}/dmarc-deploy-XXXXXX.zip")
+rm -f "$ZIP_PATH"
+RULE_ADDED=0
+cleanup() {
+  if [ "$RULE_ADDED" -eq 1 ]; then
+  az webapp config access-restriction remove --resource-group "$RESOURCE_GROUP" \
+    --name "$FUNCTION_APP" --scm-site --rule-name 'temp-manual-deploy' ||
+    echo 'Remove the temporary SCM rule manually.' >&2
+  fi
+  rm -f "$ZIP_PATH"
+}
+trap cleanup EXIT
+(cd src/function && zip -qr "$ZIP_PATH" . -x local.settings.json)
+az webapp config access-restriction add --resource-group "$RESOURCE_GROUP" --name "$FUNCTION_APP" \
+  --scm-site --rule-name 'temp-manual-deploy' --action Allow --priority 100 --ip-address "$PUBLIC_IP/32"
+RULE_ADDED=1
+az functionapp deployment source config-zip --resource-group "$RESOURCE_GROUP" --name "$FUNCTION_APP" \
+  --src "$ZIP_PATH" --build-remote false
+cleanup
+trap - EXIT
+```
 
-> **Deploy fails with a 403 or a 415?** A 403 means SCM is closed to the public
-> internet (the `scmAccessMode=restricted` default) - see
-> [docs/DEPLOYING_CODE_UPDATES.md](docs/DEPLOYING_CODE_UPDATES.md) for a temporary
-> scoped IP allow-rule (manual deploys) or the `identity-gated` mode (CI/CD, e.g.
-> GitHub-hosted Actions runners). A 415 means the deploy *tool* is the problem, not
-> access - the same doc has the verified working command to use instead.
+For CI/CD, private networking, and alternative publishing methods, see [docs/DEPLOYING_CODE_UPDATES.md](docs/DEPLOYING_CODE_UPDATES.md).
 
 ### 3. Grant Exchange RBAC Permissions
 
@@ -204,15 +252,23 @@ Grant the Function's Managed Identity permissions to access the shared mailbox. 
 
 Requires PowerShell modules: `Az.Accounts`, `Microsoft.Graph.Authentication`, `Microsoft.Graph.Applications`, `ExchangeOnlineManagement` (see Prerequisites).
 
+Connect Az PowerShell to the same tenant and subscription used for deployment. Azure CLI and Az PowerShell maintain separate contexts.
+
 **PowerShell:**
 ```powershell
+Connect-AzAccount -Tenant '<tenant-id>' -Subscription '<subscription-id>'
+
 ./scripts/Grant-MIExchangeRBAC.ps1 `
   -FunctionAppName "dmarc-func-xyz123" `
   -ResourceGroupName "rg-dmarc-prod" `
   -MailboxAddress "dmarc@example.com"
 ```
 
-This assigns Graph `Mail.Read`/`Mail.ReadWrite` app roles and creates an Exchange Application RBAC policy scoped to the DMARC mailbox only.
+The script grants Exchange Application RBAC `Application Mail.Read` and `Application Mail.ReadWrite` scoped to the mailbox; it does not grant tenant-wide Graph mail permissions. The mailbox address must be its primary SMTP address and must match the Function App's `MAILBOX_USER_ID`. The read/write role permits modification and deletion within that mailbox, and is needed to mark processed messages as read.
+
+The script stops if the managed identity has direct application permissions or unexpected Exchange application assignments. Existing Entra grants are independent of Exchange RBAC and can provide broader access. An authorized administrator must review and remove unwanted grants before rerunning; the script never removes them automatically. Previously issued managed identity tokens can remain cached for hours, potentially around 24 hours.
+
+After setup, use the displayed `Test-ServicePrincipalAuthorization` command for the DMARC mailbox and a separate test mailbox. Confirm the former is in scope and the latter is not. This command checks Exchange RBAC only, not Entra permissions; verify actual Graph access with the managed identity as well. Exchange authorization changes can take 30 minutes to two hours to propagate.
 
 ### 4. Create Graph Subscription
 
@@ -239,9 +295,11 @@ The script automates:
 2. Waits for the Partner Topic, activates it, and creates an Event Subscription
 3. Saves the subscription ID to the Function App settings
 
+The setup script saves the subscription ID before configuring Event Grid. Rerunning it renews and reuses that subscription, then resumes the idempotent Event Grid setup. It retries only a confirmed Function cold-start 404; ambiguous timeouts and server errors are not automatically replayed to avoid duplicate subscriptions. If the subscription was created but the response or settings write failed, inspect Function App logs for the subscription ID and restore `GRAPH_SUBSCRIPTION_ID` before retrying. A stored ID is reused only when its mailbox, notification URL, and client state match the current configuration.
+
 ### 5. Import Existing DMARC Reports (Optional)
 
-If the DMARC mailbox already contains reports (e.g., you had DNS configured before deploying this solution), you can import them using the `BackfillProcessor` function. This is an admin-secured HTTP endpoint — no public access.
+If the DMARC mailbox already contains reports (e.g., you had DNS configured before deploying this solution), you can import them using the `BackfillProcessor` function. It requires the admin host key; restrict network access separately if the endpoint must not be publicly reachable.
 
 **Retrieve the master host key securely via ARM and trigger the backfill:**
 
@@ -370,15 +428,15 @@ If you need ingestion confidence checks (for example during incident response), 
 
 This compares Graph message IDs with `DMARCReports_CL.SourceMessageId` and produces triage-oriented mismatch output.
 
-- This script is intended to run in the **customer tenant context** (operator machine, automation account, or tenant-owned runner).
+- This script is intended to run in the **tenant context** (operator machine, automation account, or tenant-owned runner).
 - It is not part of the required deployment workflow.
 - It should not be used as a hard gate for normal ingestion unless your team explicitly opts in.
 
 ## Upgrading an Existing Deployment
 
-Use this when you already have a working deployment and want to apply a new version of the tool. The Bicep deployment is **idempotent** — you run the same command as the initial install and ARM reconciles the diff.
+Use this when you already have a working deployment and want to apply a new version of the tool. ARM reconciles resources with the supplied parameters; it does not automatically preserve settings or parameter values omitted from the template.
 
-**Required tools** (same as [Prerequisites](#prerequisites)): Azure CLI, PowerShell 7.4+, Azure Functions Core Tools (`func`).
+**Required tools** (same as [Prerequisites](#prerequisites)): Azure CLI and PowerShell 7.4+. For Bash, `curl`, `zip`, and `jq` are also required.
 
 Before running any commands, authenticate and confirm the CLI is targeting the right subscription:
 
@@ -392,7 +450,7 @@ az account set --subscription "<your-subscription-id>"   # if needed
 
 ### Step 1: Retrieve your existing values
 
-Pull the current `MAILBOX_USER_ID` and `GRAPH_CLIENT_STATE` from your live deployment — do not set new ones.
+Pull the current `MAILBOX_USER_ID` and `GRAPH_CLIENT_STATE` from your live deployment — do not set new ones. Record all non-default deployment parameters, including workspace IDs, `baseName`, `scmAccessMode`, retention, partner configuration, and alert settings, and supply them again for the preview and deployment. The template also replaces Function App settings: record any custom settings and restore them after deployment, in addition to `GRAPH_SUBSCRIPTION_ID`.
 
 **PowerShell:**
 ```powershell
@@ -413,10 +471,8 @@ $env:GRAPH_CLIENT_STATE = az keyvault secret show `
   --vault-name $kvName --name graph-client-state `
   --query value -o tsv
 
-# If you get a Forbidden error above, grant yourself Key Vault Secrets User first:
-# $myOid = az ad signed-in-user show --query id -o tsv
-# az role assignment create --role "Key Vault Secrets User" --assignee $myOid `
-#   --scope (az keyvault show --name $kvName --query id -o tsv)
+# If the secret read is forbidden, ask an authorized administrator for temporary
+# Key Vault Secrets User access to this vault.
 
 # Capture the Graph subscription ID — Bicep will wipe it during redeployment
 $graphSubscriptionId = az functionapp config appsettings list `
@@ -489,9 +545,9 @@ az deployment group create \
   --parameters infra/main.bicepparam
 ```
 
-### Step 3b: Restore Graph subscription ID
+### Step 3b: Restore Function App settings
 
-Bicep replaces all Function App settings with only what is defined in the template, wiping `GRAPH_SUBSCRIPTION_ID`. The Graph subscription itself is still alive in Microsoft Graph — restore the pointer:
+Bicep replaces all Function App settings with only what is defined in the template, wiping `GRAPH_SUBSCRIPTION_ID` and other custom settings. The Graph subscription itself is still alive in Microsoft Graph — restore the pointer and any other recorded custom settings:
 
 **PowerShell:**
 ```powershell
@@ -511,36 +567,31 @@ az functionapp config appsettings set \
 
 ### Step 4: Publish function code
 
-**PowerShell:**
-```powershell
-cd src/function
-func azure functionapp publish $funcName --powershell
-```
+Follow the [manual ZIP publishing steps](#2-publish-function-code), using the existing resource group and Function App name. For CI/CD or private networking, see [docs/DEPLOYING_CODE_UPDATES.md](docs/DEPLOYING_CODE_UPDATES.md).
 
-**Bash:**
-```bash
-cd src/function
-func azure functionapp publish "$FUNC_NAME" --powershell
-```
+### Step 5: Review mailbox permissions
 
-Same SCM-access note as the initial deploy above applies here - see
-[docs/DEPLOYING_CODE_UPDATES.md](docs/DEPLOYING_CODE_UPDATES.md) if this fails with a
-403 or 415, or if you're wiring this into CI/CD.
+Deployments created with earlier versions may have tenant-wide Microsoft Graph `Mail.Read` and `Mail.ReadWrite` application grants. These grants are independent of Exchange Application RBAC and are not restricted by its mailbox scope. Upgrading infrastructure or code does not remove them.
 
-**That's it.** You do not need to re-run Exchange RBAC or Graph subscription setup — those are already in place. The Graph subscription ID is restored in Step 3b above.
+1. Have an Exchange administrator inspect the managed identity's Exchange Application RBAC assignments and verify that the required mail roles are scoped to the DMARC mailbox. If scoped roles are missing, configure them first using [Microsoft's Exchange Application RBAC instructions](https://learn.microsoft.com/en-us/exchange/permissions-exo/application-rbac).
+2. Verify the intended and an unrelated test mailbox with `Test-ServicePrincipalAuthorization`. This checks Exchange assignments only, not Entra grants.
+3. Have an authorized Entra administrator review and remove unwanted tenant-wide application grants from the managed identity. The setup script stops when it finds any direct application permissions; it never removes them automatically. Review any other direct grants separately before removing them.
+4. After permissions propagate, test actual Graph access using the managed identity: the intended mailbox must succeed and the unrelated test mailbox must be denied. Verify report processing and subscription renewal. Managed identity token caching can delay grant changes for hours, potentially around 24 hours.
+
+An existing Graph subscription can remain in place when its configuration and `GRAPH_CLIENT_STATE` are unchanged. Do not recreate it solely to change mailbox permissions.
 
 ### What changes between versions
 
 | Component | Behavior on upgrade |
 |-----------|-------------------|
-| Function App code | Replaced by `func publish` |
+| Function App code | Replaced by ZIP deployment |
 | LAW custom table schema | New columns added; existing rows get `null` for them |
 | DCR stream declaration | New columns added; no data loss |
 | Key Vault purge protection | Enabled if not already set (one-way, intentional) |
 | Diagnostic settings | New resources created if not present |
 | `GRAPH_CLIENT_STATE` | Unchanged — same value written back to Key Vault |
 | Graph subscription | Unchanged — auto-renews via `RenewGraphSubscription` |
-| Exchange RBAC | Unchanged |
+| Exchange RBAC and Entra grants | Unchanged by infrastructure deployment; review older tenant-wide grants as described above |
 
 ### Note on schema changes and historical data
 
@@ -561,18 +612,20 @@ Replace `DmarcPass` with `DmarcPassEffective` in any workbook tiles that show pa
 
 ### Option 1: Deploy Alert Rules via Bicep (Recommended)
 
-The infrastructure includes optional Azure Monitor scheduled query alert rules. Enable them during deployment:
+The infrastructure includes optional Azure Monitor scheduled query alert rules. During an initial deployment, enable them with `deployAlerts=true` and optionally `alertActionGroupId` in the main template parameters.
+
+For an existing deployment, deploy the alert template separately. This does not redeploy the Function App, reset its settings, or change `GRAPH_CLIENT_STATE`. Use the resource ID of the workspace containing `DMARCReports_CL` and the desired Azure region:
 
 ```powershell
-$env:MAILBOX_USER_ID = '<your-mailbox-object-id>'
-$env:GRAPH_CLIENT_STATE = [guid]::NewGuid().ToString()
-
 az deployment group create `
   --resource-group "rg-dmarc-prod" `
-  --template-file infra/main.bicep `
-  --parameters infra/main.bicepparam `
-  --parameters deployAlerts=true alertActionGroupId='/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Insights/actionGroups/<name>'
+  --template-file infra/alerts.bicep `
+  --parameters location='<azure-region>' `
+    workspaceId='/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.OperationalInsights/workspaces/<workspace>' `
+    actionGroupId='/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.Insights/actionGroups/<name>'
 ```
+
+Omit `actionGroupId` to create the rules without notification actions. If the main template is later redeployed with alerts enabled, retain the same alert parameters to avoid changing them unexpectedly.
 
 This deploys 6 alert rules:
 - **DMARC Pass Rate Drop** — fires when pass rate drops below threshold (default 90%), runs every 1 hour
@@ -652,7 +705,6 @@ The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 
 - Disposition over time (none/quarantine/reject)
 - **Subdomain discovery**: Identify shadow IT, detect new subdomains, and flag subdomain policy gaps
 - DKIM selector rotation tracking
-- BIMI readiness assessment
 
 ### Reporting & Ops
 - Report freshness monitor (color-coded per reporter)
@@ -675,8 +727,8 @@ The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 
 ### Reports Not Processing
 
 1. **Verify Managed Identity permissions**:
-   - Graph API: `Mail.Read`, `Mail.ReadWrite` app roles
-   - Exchange RBAC: Application permissions scoped to mailbox
+  - Exchange Application RBAC: `Application Mail.Read` and `Application Mail.ReadWrite` scoped to the DMARC mailbox
+  - Entra application grants: check for independent tenant-wide mail permissions; Exchange RBAC does not restrict them
    - Log Analytics: `Monitoring Metrics Publisher` on DCR
 2. **Check Graph subscription status**: Should be "enabled" and not expired
 3. **Review Function logs** for errors
@@ -693,14 +745,14 @@ Use `sampleMissingTriage` from the output report to separate likely non-DMARC no
 ### Permission Errors
 
 If you see errors like "Access Denied" or "Insufficient privileges":
-- Ensure the Managed Identity has been granted permissions (may take 5-10 minutes to propagate)
+- Allow 30 minutes to two hours for Exchange Application RBAC changes to propagate. Managed identity tokens can cache Entra role changes for hours, potentially around 24 hours.
 - Verify Exchange RBAC scope is configured correctly
 - Check that the MI has `Monitoring Metrics Publisher` on the DCR
 
 ## Security Considerations
 
 - **No Client Secrets**: Uses Azure Managed Identity exclusively
-- **Least Privilege**: Exchange RBAC limits MI to the shared mailbox only
+- **Least Privilege**: Exchange Application RBAC scopes mail roles to the shared mailbox; independent Entra grants must also be reviewed
 - **Key Vault Integration**: Secrets (Graph client state) stored in Key Vault
 - **DTD Attack Protection**: XML parsing explicitly disables DTD processing
 - **Input Validation**: All report data sanitized before ingestion

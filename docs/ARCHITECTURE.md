@@ -41,7 +41,7 @@ Log Analytics Workspace (DMARCReports_CL custom table)
 
 **No app registration or client secrets.** The Function App uses a **system-assigned Managed Identity** for all API calls:
 
-- **Microsoft Graph**: MI is granted `Mail.Read` + `Mail.ReadWrite` app roles, scoped to the DMARC shared mailbox only via Exchange Online Application RBAC (Management Scope).
+- **Microsoft Graph**: Exchange Online Application RBAC grants the MI `Application Mail.Read` and `Application Mail.ReadWrite` scoped to the DMARC shared mailbox. No tenant-wide Graph mail app roles are granted.
 - **Logs Ingestion API**: MI is granted `Monitoring Metrics Publisher` role on the DCR via Azure RBAC.
 - **Azure Key Vault**: MI is granted `Key Vault Secrets User` role to read secrets (such as the Graph client state validation token) via Azure RBAC.
 
@@ -64,7 +64,7 @@ Instead of the legacy Application Access Policy (which is being deprecated), thi
 
 1. A **Management Scope** restricts access to the DMARC shared mailbox only.
 2. **Application roles** (`Application Mail.Read`, `Application Mail.ReadWrite`) are assigned to the MI's service principal, scoped to the management scope.
-3. The MI **cannot access any other mailbox** in the tenant.
+3. Exchange RBAC grants apply only within that scope. Independent Entra application grants are additive and must not grant broader mailbox access.
 
 ## Graph Change Notifications via Event Grid
 

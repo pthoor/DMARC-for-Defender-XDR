@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────────────────────
-// DMARC-to-Sentinel Pipeline — Infrastructure
+// DMARC for Defender XDR — Infrastructure
 // Deploys: Log Analytics, Custom Table, DCR, Storage, App Insights,
 //          Function App (PowerShell 7.4, Flex Consumption) with Managed Identity,
 //          and RBAC role assignment for Logs Ingestion.

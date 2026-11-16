@@ -11,6 +11,7 @@
 
 BeforeAll {
     $scriptPath = "$PSScriptRoot/../scripts/New-GraphSubscription.ps1"
+    $bashScriptPath = "$PSScriptRoot/../scripts/New-GraphSubscription.sh"
 }
 
 Describe 'New-GraphSubscription.ps1' {
@@ -57,9 +58,9 @@ Describe 'New-GraphSubscription.ps1' {
             $content | Should -Match 'SetupHelper.*-notin.*deployedFunctions'
         }
 
-        It 'Should suggest func publish if function is not deployed' {
+        It 'Should reference the documented ZIP deployment if the function is not deployed' {
             $content = Get-Content $scriptPath -Raw
-            $content | Should -Match 'func azure functionapp publish'
+            $content | Should -Match 'manual ZIP deployment steps in README\.md'
         }
     }
 
@@ -92,7 +93,27 @@ Describe 'New-GraphSubscription.ps1' {
         It 'Should retry for cold start' {
             $content = Get-Content $scriptPath -Raw
             $content | Should -Match 'maxAttempts'
+            $content | Should -Match 'StatusCode -ne 404'
             $content | Should -Match 'retrying in 15s'
+        }
+
+        It 'Should pass a stored subscription ID to SetupHelper for resume' {
+            $content = Get-Content $scriptPath -Raw
+            $content | Should -Match 'existingGraphSubscriptionId'
+            $content | Should -Match 'setupPayload\.subscriptionId'
+        }
+
+        It 'Should save the ID before Event Grid setup to support safe reruns' {
+            $content = Get-Content $scriptPath -Raw
+            $saveIndex = $content.IndexOf('GRAPH_SUBSCRIPTION_ID saved before Event Grid setup')
+            $eventGridIndex = $content.IndexOf('[3/4] Activating partner topic', [System.StringComparison]::OrdinalIgnoreCase)
+            ($saveIndex -ge 0 -and $eventGridIndex -gt $saveIndex) | Should -Be $true
+        }
+
+        It 'Should not automatically replay ambiguous subscription creation failures' {
+            $content = Get-Content $scriptPath -Raw
+            $content | Should -Match 'do not automatically replay the POST'
+            $content | Should -Match 'It was not retried automatically'
         }
 
         It 'Should construct correct notification URL' {
@@ -123,6 +144,11 @@ Describe 'New-GraphSubscription.ps1' {
         It 'Should activate the partner topic' {
             $content = Get-Content $scriptPath -Raw
             $content | Should -Match '(?s)partnerTopics.*activate'
+        }
+
+        It 'Should skip partner topic activation when it is already active' {
+            $content = Get-Content $scriptPath -Raw
+            $content | Should -Match "activationState -eq 'Activated'"
         }
 
         It 'Should handle timeout' {
@@ -185,5 +211,38 @@ Describe 'New-GraphSubscription.ps1' {
             $content = Get-Content $scriptPath -Raw
             $content | Should -Not -Match 'Read-Host'
         }
+    }
+}
+
+Describe 'New-GraphSubscription.sh' {
+    BeforeAll {
+        $content = Get-Content $bashScriptPath -Raw
+    }
+
+    It 'passes a validated stored subscription ID to SetupHelper' {
+        $content | Should -Match 'EXISTING_GRAPH_SUBSCRIPTION_ID'
+        $content | Should -Match 'subscriptionId: \$id'
+        $content | Should -Match '\[\[:xdigit:\]\]\{8\}.*\[\[:xdigit:\]\]\{12\}'
+    }
+
+    It 'retries only confirmed 404 responses' {
+        $content | Should -Match '\[\[ "\$HTTP_CODE" == "404" && \$attempt -lt \$MAX_ATTEMPTS \]\]'
+        $content | Should -Match 'retrying in 15s'
+        $content | Should -Match 'not retried automatically to avoid duplicate Graph subscriptions'
+    }
+
+    It 'saves the subscription ID before Event Grid setup and verifies it afterward' {
+        $saveIndex = $content.IndexOf('GRAPH_SUBSCRIPTION_ID saved before Event Grid setup')
+        $eventGridIndex = $content.IndexOf('[3/4] Activating partner topic', [System.StringComparison]::OrdinalIgnoreCase)
+        $verifyIndex = $content.IndexOf('[4/4] Verifying saved subscription ID', [System.StringComparison]::OrdinalIgnoreCase)
+        ($saveIndex -ge 0 -and $eventGridIndex -gt $saveIndex -and $verifyIndex -gt $eventGridIndex) | Should -Be $true
+    }
+
+    It 'skips partner-topic activation when it is already active' {
+        $content | Should -Match 'properties\.activationState'
+        $alreadyActiveIndex = $content.IndexOf('if [[ "$ACTIVATION_STATE" == "Activated" ]]')
+        $needsActivationIndex = $content.IndexOf('elif [[ "$ACTIVATION_STATE" == "NeverActivated" ]]')
+        $activationRequestIndex = $content.IndexOf('az rest --method post --url "${TOPIC_URL}/activate?${EG_API}"')
+        ($alreadyActiveIndex -ge 0 -and $needsActivationIndex -gt $alreadyActiveIndex -and $activationRequestIndex -gt $needsActivationIndex) | Should -Be $true
     }
 }

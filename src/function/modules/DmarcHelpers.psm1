@@ -2,7 +2,7 @@
 
 <#
 .SYNOPSIS
-    Shared helper functions for the DMARC-to-Sentinel pipeline.
+    Shared helper functions for DMARC for Defender XDR.
 .DESCRIPTION
     Provides token acquisition (Managed Identity), Microsoft Graph API calls,
     DMARC XML parsing, and Log Analytics ingestion via the Logs Ingestion API (DCR).
