@@ -669,7 +669,7 @@ See [`detections/README.md`](detections/README.md) for full instructions.
 
 ## Workbook Capabilities
 
-The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 tabs with the following visualization and operations views:
+The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 6 tabs with the following visualization and operations views:
 
 ### Executive Summary
 - Total message volume, unique source IPs, reporters, pass rate (KPI tiles)
@@ -686,34 +686,39 @@ The Azure Monitor Workbook (`workbook/dmarc-workbook.json`) is organized into 5 
 - Envelope vs header from mismatch analysis
 - DKIM selector-level detail and alignment mode breakdown
 - **Alignment failures**: Messages where raw SPF/DKIM passed but DMARC alignment failed, with fix guidance
-- **Service-specific fix recommendations**: Per-sender SPF include and DKIM setup instructions for 14+ known services
+- **Service-specific fix recommendations**: Per-sender DKIM signing and custom return-path guidance for 14+ known services, with forwarded mail called out separately
 
 ### Sources & Senders
 - **Top 50 Source IPs** with pass rates, service identification, and IP reputation links
-- Authorized vs unknown sender classification (via SPF domain matching, not ASN)
+- Sender classification (Authorized, Forwarded / Indirect, Needs Attention, Misconfigured, Unknown / Suspicious) based on DMARC results and known providers (via SPF domain matching, not ASN)
 - Source IP classification by provider category (Email Platform, ESP, CRM, SaaS, Security)
 - Volume anomaly detection (Z-score based)
 - **GeoIP Map** showing geographic distribution of email sources
-- **Suspicious IPs** (both SPF and DKIM failing)
+- **Failing source IPs** (DMARC fail, excluding forwarding and mailing-list overrides)
 - Volume by sending identity (HeaderFrom)
 
 ### Domain Compliance
 - Per-domain compliance scoring and pass rates
 - Domain readiness for policy enforcement progression
 - Published DMARC policies
-- **DMARC Policy Health Check**: Flags p=none, missing subdomain policy, low pct, and other gaps
+- **DMARC Policy Health Check**: Flags p=none, sp=none under an enforcing p=, partial pct, and other gaps
 - Disposition over time (none/quarantine/reject)
 - **Subdomain discovery**: Identify shadow IT, detect new subdomains, and flag subdomain policy gaps
 - DKIM selector rotation tracking
+- Policy guidance for DMARC policy progression
 
 ### Reporting & Ops
 - Report freshness monitor (color-coded per reporter)
 - Freshness state counts and stalled-reporter visibility
-- Duplicate report-key ratio and top duplicate contributors
 - Reporter coverage and missing expected reporters
 - Reports by provider and report volume over time
 - Azure Monitor alert rule templates (5 ready-to-use KQL queries)
-- Policy guidance for DMARC policy progression
+
+### Pipeline Admin
+For the team that operates the ingestion pipeline; most DMARC analysts don't need this tab.
+- Function executions, failures and exception hotspots, scoped to the DMARC functions (or to a Function App name you enter)
+- Runtime triage notes linking to the [runbook](docs/RUNBOOK.md)
+- Duplicate report-key ratio and top duplicate contributors
 
 ## Troubleshooting
 
