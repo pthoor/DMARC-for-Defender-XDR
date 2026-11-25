@@ -12,6 +12,7 @@ obj/
 .python_packages/
 __pycache__/
 .funcignore
+*.local.*
 
 # IDE
 .vscode/

@@ -11,6 +11,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Removed the public live-validation workflow so Azure tenant credentials are no longer connected to public CI. Detection rules can still be validated manually against a test workspace with `scripts/Test-DetectionRulesLive.ps1`; see `docs/LIVE_VALIDATION.md`.
 - The live-validation script no longer prints raw Azure responses or the workspace name.
 
+### Fixed
+- Workbook: fix recommendations for third-party senders (SendGrid, Amazon SES, Mailgun and others) no longer tell you to add an SPF `include:`, which doesn't align SPF. They now point to DKIM signing with your domain and a custom return-path. Mostly-forwarded traffic is called out separately.
+- Workbook: a missing `sp=` tag is no longer reported as a subdomain spoofing risk. Subdomains inherit `p=`, so only `sp=none` under an enforcing `p=`, `p=none`, or `sp=quarantine` under `p=reject` are flagged.
+- Workbook: sender classification no longer labels unrecognized, mostly-failing sources as "Misconfigured" because they had an SPF domain. Sources that pass DMARC are "Authorized", forwarding-driven failures are "Forwarded / Indirect", and unrecognized failing sources are "Unknown / Suspicious".
+- Workbook: "What to Fix Next" and the failing source IP table exclude forwarded and mailing-list mail. Failures from recognized providers such as Microsoft 365 are no longer marked Critical.
+- Workbook: the week-over-week tiles now show all four metrics with their change, and say when there's no data for the previous week.
+- Workbook: the geographic map colors locations by message-weighted pass rate instead of a sum of percentages.
+- Workbook: Function runtime panels only show the DMARC functions (or the Function App name you enter), not every app in a shared workspace.
+
+### Changed
+- Workbook: Function runtime health and duplicate telemetry moved from **Reporting & Ops** to a new **Pipeline Admin** tab for pipeline operators. Its triage notes link to the runbook on GitHub.
+- Workbook: panels show a "no data" message explaining the 24–48 hour report delay; the header explains which panels ignore the Time Range picker; and the workspace picker lists workspaces with "dmarc" in the name first.
+- Workbook: guidance no longer recommends `pct=` for a gradual rollout, because DMARCbis drops it.
+
 ## [1.5.0] - 2026-11-12
 
 ### Security
